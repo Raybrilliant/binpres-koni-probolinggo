@@ -1,17 +1,90 @@
 ---
+import Landing from "../components/Landing.svelte";
+import "../styles/global.css";
+import { searchPhotos, fallbackPhoto } from "../lib/pexels";
 
+const hero = await searchPhotos(
+    "sports training stadium athlete",
+    1,
+    "landscape",
+);
+const portraits = await searchPhotos(
+    "professional portrait person indonesia",
+    6,
+    "portrait",
+);
+
+const pengurus = [
+    {
+        nama: "Drs. Bambang Wibowo",
+        jabatan: "Ketua Harian",
+        bio: "Drs. Bambang Wibowo memimpin BINPRES KONI Kota Probolinggo sejak 2021 dengan fokus pada pembinaan atlet usia dini. Berpengalaman lebih dari 25 tahun di dunia keolahragaan, ia percaya prestasi nasional lahir dari pembinaan yang konsisten di tingkat kota. Di bawah kepemimpinannya, jumlah atlet binaan meningkat hampir dua kali lipat.",
+        foto: "",
+    },
+    {
+        nama: "Siti Rahmawati, S.Pd.",
+        jabatan: "Sekretaris",
+        bio: "Siti Rahmawati, S.Pd. adalah Sekretaris BINPRES KONI Kota Probolinggo sekaligus pendidik olahraga berpengalaman. Ia menangani administrasi keanggotaan, koordinasi antar cabang olahraga, serta dokumentasi prestasi atlet. Dedikasinya pada tata kelola yang transparan membuat pengelolaan data pembinaan semakin rapi.",
+        foto: "",
+    },
+    {
+        nama: "H. Agus Salim, S.E.",
+        jabatan: "Bendahara",
+        bio: "H. Agus Salim, S.E. mengawal keuangan organisasi dengan prinsip akuntabilitas penuh. Lulusan ekonomi yang aktif di dunia kepemudaan ini memastikan setiap program pembinaan — dari beban latihan hingga pembiayaan kejuaraan — tercatat dan terlaporkan secara tertib kepada pengurus dan pemangku kepentingan.",
+        foto: "",
+    },
+    {
+        nama: "Rina Kartika, S.Or.",
+        jabatan: "Ketua Bidang Pembinaan",
+        bio: "Rina Kartika, S.Or. memimpin bidang pembinaan prestasi lintas cabang olahraga. Dengan latar belakang sarjana kepelatihan, ia merancang program pemantauan talenta muda, koordinasi pelatih, serta evaluasi periodik perkembangan atlet binaan KONI Kota Probolinggo dari usia dini hingga junior elite.",
+        foto: "",
+    },
+    {
+        nama: "Yudi Purnomo, M.Pd.",
+        jabatan: "Ketua Bidang Sarana",
+        bio: "Yudi Purnomo, M.Pd. bertanggung jawab atas sarana dan prasarana latihan. Ia menjalin kemitraan dengan sekolah, clubhouse, dan pemerintah kota agar setiap cabang olahraga memiliki tempat latihan yang layak — mulai dari hall indoor hingga lapangan outdoor standar perlombaan.",
+        foto: "",
+    },
+    {
+        nama: "Dewi Anggraeni, S.Kom.",
+        jabatan: "Ketua Bidang Data & Informasi",
+        bio: "Dewi Anggraeni, S.Kom. mengelola sistem informasi dan pendataan atlet, pelatih, serta klub/dojo se-Kota Probolinggo. Ia mengembangkan panel admin digital BINPRES agar data pembinaan terpusat, mudah diakses, dan menjadi dasar pengambilan keputusan pengurus.",
+        foto: "",
+    },
+];
+
+pengurus.forEach((p, i) => {
+    p.foto = portraits[i]?.src || fallbackPhoto(`pengurus-${i + 1}`, 600, 800);
+});
+
+const heroImage = hero[0]?.src || fallbackPhoto("binpres-hero", 1200, 900);
 ---
 
-<html lang="en">
-	<head>
-		<meta charset="utf-8" />
-		<link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-		<link rel="icon" href="/favicon.ico" />
-		<meta name="viewport" content="width=device-width" />
-		<meta name="generator" content={Astro.generator} />
-		<title>Astro</title>
-	</head>
-	<body>
-		<h1>Astro</h1>
-	</body>
+<html lang="id">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="generator" content={Astro.generator} />
+        <title>BINPRES KONI Kota Probolinggo — Bina Prestasi</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap"
+            rel="stylesheet"
+        />
+        <style is:global>
+            @theme {
+                --font-poppins: "Poppins", ui-sans-serif, system-ui, sans-serif;
+            }
+            body {
+                font-family: "Poppins", ui-sans-serif, system-ui, sans-serif;
+            }
+            html {
+                scroll-behavior: smooth;
+            }
+        </style>
+    </head>
+    <body class="bg-white antialiased">
+        <Landing client:load {heroImage} {pengurus} />
+    </body>
 </html>
