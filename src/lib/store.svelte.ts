@@ -2,7 +2,22 @@ export type Row = Record<string, any>;
 export type Field = { key: string; label: string; type?: string };
 export type Section = { id: string; label: string; icon: string; fields: Field[]; rows: Row[] };
 
-const KEY = 'binpres-admin-db';
+// 48 cabang olahraga binaan KONI Kota Probolinggo (sesuai data resmi)
+export const CABOR: string[] = [
+  'AKUATIK (AI)', 'ANGGAR (IKASI)', 'ANGKAT BERAT (PABERSI)', 'ANGKAT BESI (PABSI)',
+  'ATLETIK (PASI)', 'BALAP SEPEDA (ISSI)', 'BERKUDA (PORDASI)', 'BERMOTOR (IMI)',
+  'BILIARD (POBSI)', 'BINARAGA (PBFI)', 'BOLA BASKET 3X3 (PERBASI)', 'BOLA TANGAN (ABTI)',
+  'BOLA VOLI (PBVSI)', 'BRIDGE (GABSI)', 'BULU TANGKIS (PBSI)', 'CATUR (PERCASI)',
+  'DANCESPORT (IODI)', 'DAYUNG (PODSI)', 'DOMINO (ORADO)', 'DRUMBAND (PDBI)',
+  'FUTSAL (AFI)', 'HAPKIDO (HI)', 'KARATE (FORKI)', 'KURASH (FERKUSHI)',
+  'MENEMBAK (PERBAKIN)', 'MUATHAY (MI)', 'PANAHAN (PERPANI)', 'PANJAT TEBING (FPTI)',
+  'PENCAK SILAT (IPSI)', 'PETANQUE (FOPI)', 'SELAM (POSSI)', 'SENAM (PERSANI)',
+  'SEPAK BOLA (PSSI)', 'SEPAK TAKRAW (PSTI)', 'SEPATU RODA (PERSEROSI)', 'SKY AIR (PSAWI)',
+  'TAE KWON DO (TI)', 'TARUNG DRAJAT (KODRAT)', 'TENIS (PELTI)', 'TENIS MEJA (PTMSI)',
+  'TINJU (PERTINA)', 'TRIATHLON (FTI)', 'WUSHU (WI)', 'ARUNG JERAM (FAJI)',
+  'GATEBALL (PERGATSI)', 'IBCA MMA', 'KICK BOXING (KBI)', 'PARAMOTOR (FASI)',
+] as const;
+
 // Astro static site: hanya env ber-prefix PUBLIC_ yang sampai ke client
 const ENDPOINT: string = (import.meta.env.PUBLIC_GAS_ENDPOINT || import.meta.env.GAS_ENDPOINT || '') as string;
 
@@ -32,11 +47,9 @@ function seed(): Section[] {
         { key: 'tempatLahir', label: 'Tempat Lahir' },
         { key: 'tanggalLahir', label: 'Tanggal Lahir', type: 'date' },
         { key: 'jenisKelamin', label: 'Jenis Kelamin' },
+        { key: 'cabor', label: 'Cabang Olahraga' },
       ],
-      rows: [
-        { nama: 'Ravi Pratama', tempatLahir: 'Probolinggo', tanggalLahir: '2008-04-12', jenisKelamin: 'Laki-laki' },
-        { nama: 'Sinta Dewi', tempatLahir: 'Probolinggo', tanggalLahir: '2006-09-03', jenisKelamin: 'Perempuan' },
-      ],
+      rows: [],
     },
     {
       id: 'pelatih',
@@ -47,11 +60,9 @@ function seed(): Section[] {
         { key: 'alamat', label: 'Alamat' },
         { key: 'jenisKelamin', label: 'Jenis Kelamin' },
         { key: 'lisensi', label: 'Lisensi Pelatih' },
+        { key: 'cabor', label: 'Cabang Olahraga' },
       ],
-      rows: [
-        { nama: 'Bambang Sutrisno', alamat: 'Jl. Sudirman 12', jenisKelamin: 'Laki-laki', lisensi: 'Level 3' },
-        { nama: 'Rina Wulandari', alamat: 'Jl. Diponegoro 8', jenisKelamin: 'Perempuan', lisensi: 'Level 2' },
-      ],
+      rows: [],
     },
     {
       id: 'jadwal',
@@ -62,10 +73,7 @@ function seed(): Section[] {
         { key: 'hari', label: 'Hari Latihan' },
         { key: 'jam', label: 'Jam Latihan' },
       ],
-      rows: [
-        { tempat: 'GOR Sumber Taman', hari: 'Senin & Kamis', jam: '15.00 - 17.00' },
-        { tempat: 'Lapangan Mayangan', hari: 'Selasa & Jumat', jam: '16.00 - 18.00' },
-      ],
+      rows: [],
     },
     {
       id: 'klub',
@@ -76,10 +84,7 @@ function seed(): Section[] {
         { key: 'cabang', label: 'Cabang' },
         { key: 'alamat', label: 'Alamat' },
       ],
-      rows: [
-        { nama: 'Dojang Nusantara', cabang: 'Taekwondo', alamat: 'Jl. Raya Mayangan No. 12' },
-        { nama: 'Inkanas Probolinggo', cabang: 'Karate', alamat: 'Jl. Sumbing No. 5' },
-      ],
+      rows: [],
     },
     {
       id: 'pengurus',
@@ -101,28 +106,20 @@ function seed(): Section[] {
         { key: 'cabor', label: 'Cabang Olahraga' },
         { key: 'role', label: 'Role' },
       ],
-      rows: [
-        { nama: 'Admin KONI', username: 'adminkoni', cabor: 'Semua', role: 'Super Admin' },
-        { nama: 'Sekretariat', username: 'sekretariat', cabor: 'Semua', role: 'Admin' },
-        { nama: 'Penginput Data', username: 'inputdata', cabor: 'Taekwondo', role: 'Operator' },
-      ],
+      rows: [],
     },
   ];
 }
 
 function loadLocal(): Section[] {
   // mode GAS: selalu mulai kosong, data diambil dari spreadsheet saat refresh()
-  if (ENDPOINT) return seed().map((s) => ({ ...s, rows: [] }));
-  if (typeof localStorage === 'undefined') return seed();
-  try {
-    const raw = localStorage.getItem(KEY);
-    return raw ? JSON.parse(raw) : seed();
-  } catch {
-    return seed();
-  }
+  return seed().map((s) => ({ ...s, rows: [] }));
 }
 
 export const db = $state<{ sections: Section[] }>({ sections: loadLocal() });
+
+// sekali jalan: hapus cache lama yang masih menyimpan data dummy versi lama
+if (typeof localStorage !== 'undefined') localStorage.removeItem('binpres-admin-db');
 
 export const ui = $state({ loaded: !ENDPOINT });
 
@@ -163,23 +160,17 @@ async function doRefresh() {
 }
 if (typeof window !== 'undefined') refresh();
 
-export function save() {
-  saveLocal();
-}
 
-function saveLocal() {
-  if (typeof localStorage !== 'undefined') localStorage.setItem(KEY, JSON.stringify(db.sections));
-}
 
 export async function addRow(sectionId: string, row: Row) {
   if (ENDPOINT) {
-    const r = await api({ action: 'create', sheet: SHEET[sectionId] ?? sectionId, data: row });
+    // tandai pembuat data utk RBAC operator (backend membuang kolom ini di sheet tanpa createdBy)
+    const r = await api({ action: 'create', sheet: SHEET[sectionId] ?? sectionId, actor: auth.user?.username, data: row });
     if (r.ok) await refresh();
     return r;
   }
   row.id = crypto.randomUUID();
   db.sections.find((s) => s.id === sectionId)?.rows.push(row);
-  saveLocal();
   return { ok: true };
 }
 
@@ -192,7 +183,6 @@ export async function updateRow(sectionId: string, id: string, data: Row) {
   const rows = db.sections.find((s) => s.id === sectionId)?.rows ?? [];
   const i = rows.findIndex((r) => r.id === id);
   if (i >= 0) rows[i] = { ...rows[i], ...data };
-  saveLocal();
   return { ok: true };
 }
 
@@ -205,7 +195,6 @@ export async function deleteRow(sectionId: string, id: string) {
   const s = db.sections.find((x) => x.id === sectionId);
   const i = s?.rows.findIndex((r) => r.id === id) ?? -1;
   if (i >= 0) s!.rows.splice(i, 1);
-  saveLocal();
   return { ok: true };
 }
 

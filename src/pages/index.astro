@@ -14,48 +14,10 @@ const portraits = await searchPhotos(
     "portrait",
 );
 
-const pengurus = [
-    {
-        nama: "Drs. Bambang Wibowo",
-        jabatan: "Ketua Harian",
-        bio: "Drs. Bambang Wibowo memimpin BINPRES KONI Kota Probolinggo sejak 2021 dengan fokus pada pembinaan atlet usia dini. Berpengalaman lebih dari 25 tahun di dunia keolahragaan, ia percaya prestasi nasional lahir dari pembinaan yang konsisten di tingkat kota. Di bawah kepemimpinannya, jumlah atlet binaan meningkat hampir dua kali lipat.",
-        foto: "",
-    },
-    {
-        nama: "Siti Rahmawati, S.Pd.",
-        jabatan: "Sekretaris",
-        bio: "Siti Rahmawati, S.Pd. adalah Sekretaris BINPRES KONI Kota Probolinggo sekaligus pendidik olahraga berpengalaman. Ia menangani administrasi keanggotaan, koordinasi antar cabang olahraga, serta dokumentasi prestasi atlet. Dedikasinya pada tata kelola yang transparan membuat pengelolaan data pembinaan semakin rapi.",
-        foto: "",
-    },
-    {
-        nama: "H. Agus Salim, S.E.",
-        jabatan: "Bendahara",
-        bio: "H. Agus Salim, S.E. mengawal keuangan organisasi dengan prinsip akuntabilitas penuh. Lulusan ekonomi yang aktif di dunia kepemudaan ini memastikan setiap program pembinaan — dari beban latihan hingga pembiayaan kejuaraan — tercatat dan terlaporkan secara tertib kepada pengurus dan pemangku kepentingan.",
-        foto: "",
-    },
-    {
-        nama: "Rina Kartika, S.Or.",
-        jabatan: "Ketua Bidang Pembinaan",
-        bio: "Rina Kartika, S.Or. memimpin bidang pembinaan prestasi lintas cabang olahraga. Dengan latar belakang sarjana kepelatihan, ia merancang program pemantauan talenta muda, koordinasi pelatih, serta evaluasi periodik perkembangan atlet binaan KONI Kota Probolinggo dari usia dini hingga junior elite.",
-        foto: "",
-    },
-    {
-        nama: "Yudi Purnomo, M.Pd.",
-        jabatan: "Ketua Bidang Sarana",
-        bio: "Yudi Purnomo, M.Pd. bertanggung jawab atas sarana dan prasarana latihan. Ia menjalin kemitraan dengan sekolah, clubhouse, dan pemerintah kota agar setiap cabang olahraga memiliki tempat latihan yang layak — mulai dari hall indoor hingga lapangan outdoor standar perlombaan.",
-        foto: "",
-    },
-    {
-        nama: "Dewi Anggraeni, S.Kom.",
-        jabatan: "Ketua Bidang Data & Informasi",
-        bio: "Dewi Anggraeni, S.Kom. mengelola sistem informasi dan pendataan atlet, pelatih, serta klub/dojo se-Kota Probolinggo. Ia mengembangkan panel admin digital BINPRES agar data pembinaan terpusat, mudah diakses, dan menjadi dasar pengambilan keputusan pengurus.",
-        foto: "",
-    },
-];
-
-pengurus.forEach((p, i) => {
-    p.foto = portraits[i]?.src || fallbackPhoto(`pengurus-${i + 1}`, 600, 800);
-});
+// fallback foto saat row dari database belum punya URL foto
+const photos = portraits.map(
+    (p, i) => p?.src || fallbackPhoto(`pengurus-${i + 1}`, 600, 800),
+);
 
 const heroImage = hero[0]?.src || fallbackPhoto("binpres-hero", 1200, 900);
 ---
@@ -85,6 +47,6 @@ const heroImage = hero[0]?.src || fallbackPhoto("binpres-hero", 1200, 900);
         </style>
     </head>
     <body class="bg-white antialiased">
-        <Landing client:load {heroImage} {pengurus} />
+        <Landing client:load {heroImage} {photos} />
     </body>
 </html>

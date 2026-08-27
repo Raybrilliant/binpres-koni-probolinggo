@@ -3,9 +3,11 @@ import TambahForm from "../../../components/TambahForm.svelte";
 import "../../../styles/global.css";
 
 export function getStaticPaths() {
-    return ["atlit", "pelatih", "jadwal", "klub", "users"].map((section) => ({
-        params: { section },
-    }));
+    return ["atlit", "pelatih", "jadwal", "klub", "pengurus", "users"].map(
+        (section) => ({
+            params: { section },
+        }),
+    );
 }
 
 const { section } = Astro.params;

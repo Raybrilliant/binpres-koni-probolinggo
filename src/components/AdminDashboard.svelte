@@ -1,11 +1,15 @@
 <script lang="ts">
+  import type { Row } from '../lib/store.svelte';
+  import { CABOR } from '../lib/store.svelte';
+
   import { onMount } from 'svelte';
+  import { fade, scale } from 'svelte/transition';
   import gsap from 'gsap';
-  import { db, save, auth, login, logout, deleteRow, ui } from '../lib/store.svelte';
+  import { db, auth, login, logout, deleteRow, ui } from '../lib/store.svelte';
 
   const sections = db.sections;
 
-  let view = $state('dashboard');
+  let view = $state(auth.user && auth.user.cabor !== 'Semua' ? 'atlit' : 'dashboard');
   let username = $state('');
   let password = $state('');
   let loginError = $state('');
@@ -18,7 +22,7 @@
     loginError = (await login(username, password)) ?? '';
     busy = false;
     if (!loginError) {
-      view = 'dashboard';
+      view = auth.user?.cabor === 'Semua' ? 'dashboard' : 'atlit';
       gsap.from('.sidebar', { x: -60, autoAlpha: 0, duration: 0.5, ease: 'power3.out' });
     } else {
       gsap.fromTo('.login-error', { x: -10 }, { x: 0, duration: 0.4, ease: 'elastic.out(1, 0.3)' });
@@ -26,24 +30,80 @@
   }
   $effect(() => {
     const hash = location.hash.slice(1);
-    if (hash && sections.some((s) => s.id === hash)) view = hash;
+    if (hash && menuSections.some((s) => s.id === hash)) view = hash;
   });
   let openCabang = $state(true);
   let search = $state('');
   let page = $state(1);
   const perPage = 5;
 
-  const active = $derived(sections.find((s) => s.id === view));
+  const isAdmin = $derived(!auth.user || auth.user.cabor === 'Semua');
+  const menuSections = $derived(isAdmin ? sections : sections.filter((s) => !['users', 'pengurus'].includes(s.id)));
 
+  const active = $derived(sections.find((s) => s.id === view));
+  // non-admin: tolak akses ke section terlarang (dashboard/users/pengurus)
+  const allowedView = $derived(isAdmin || !['dashboard', 'users', 'pengurus'].includes(view));
+
+  // RBAC: admin lihat semua; operator hanya data yang dibuat sendiri (kolom createdBy)
+  const scopedRows = $derived.by(() => {
+    if (!active) return [];
+    if (isAdmin) return active.rows;
+    if (!['atlit', 'pelatih', 'jadwal', 'klub'].includes(active.id)) return []; // cegah bocor via hash URL
+    const me = auth.user!.username;
+    return active.rows.filter((r) => String(r.createdBy ?? '') === me);
+  });
   const filtered = $derived(
-    active
-      ? active.rows.filter((r) =>
-          Object.values(r).join(' ').toLowerCase().includes(search.toLowerCase())
-        )
-      : []
+    scopedRows.filter((r) =>
+      Object.values(r).join(' ').toLowerCase().includes(search.toLowerCase())
+    )
   );
   const totalPages = $derived(Math.max(1, Math.ceil(filtered.length / perPage)));
   const paged = $derived(filtered.slice((page - 1) * perPage, page * perPage));
+
+  $effect(() => {
+    if (!allowedView) view = 'atlit';
+  });
+
+  // ===== statistik dashboard =====
+  function perCabor(rows: Row[], field = 'cabor') {
+    const m: Record<string, number> = {};
+    CABOR.forEach((c) => (m[c] = 0));
+    rows.forEach((r) => {
+      const c = String(r[field] ?? '').trim();
+      if (!c) return;
+      m[c] = (m[c] ?? 0) + 1; // nilai legacy di luar daftar resmi ikut dihitung
+    });
+    return Object.entries(m)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)); // terbanyak di atas
+  }
+  const allRows = $derived({
+    atlit: sections.find((s) => s.id === 'atlit')?.rows ?? [],
+    pelatih: sections.find((s) => s.id === 'pelatih')?.rows ?? [],
+    klub: sections.find((s) => s.id === 'klub')?.rows ?? [],
+  });
+  const atlitPerCabor = $derived(perCabor(allRows.atlit));
+  const pelatihPerCabor = $derived(perCabor(allRows.pelatih));
+  const klubPerCabor = $derived(perCabor(allRows.klub, 'cabang'));
+  const maxA = $derived(Math.max(1, ...atlitPerCabor.map((x) => x.count)));
+  const maxP = $derived(Math.max(1, ...pelatihPerCabor.map((x) => x.count)));
+  const maxK = $derived(Math.max(1, ...klubPerCabor.map((x) => x.count)));
+
+  const TINGKAT_PRESTASI = ['Internasional', 'Nasional', 'Provinsi'];
+  const tingkatIcon: Record<string, string> = { Internasional: '🌍', Nasional: '🇮🇩', Provinsi: '🏙️' };
+  const prestasiTingkat = $derived.by(() => {
+    const m: Record<string, number> = {};
+    TINGKAT_PRESTASI.forEach((t) => (m[t] = 0));
+    let total = 0;
+    (sections.find((s) => s.id === 'atlit')?.rows ?? []).forEach((r) =>
+      ((r.prestasi ?? []) as Row[]).forEach((p) => {
+        const t = String(p.tingkat ?? '').trim() || 'Lainnya';
+        total++;
+        m[t] = (m[t] ?? 0) + 1;
+      })
+    );
+    return { total, rows: Object.entries(m).map(([name, count]) => ({ name, count })) };
+  });
 
   function animateContent() {
     gsap.fromTo(
@@ -76,12 +136,39 @@
       if (row.id) await deleteRow(active.id, row.id);
       else {
         active.rows.splice((page - 1) * perPage + i, 1);
-        save();
         if (page > totalPages) page = totalPages;
       }
     } finally {
       busy = false;
     }
+  }
+
+  // ==== detail row ====
+  let detail = $state<Row | null>(null);
+
+  const DETAIL_LABELS: Record<string, string> = {
+    nama: 'Nama', tempatLahir: 'Tempat Lahir', tanggalLahir: 'Tanggal Lahir',
+    jenisKelamin: 'Jenis Kelamin', alamat: 'Alamat', kk: 'Kartu Keluarga (KK)',
+    akte: 'Akte Lahir', ktp: 'KTP', piagam: 'Piagam', tahun: 'Tahun',
+    tingkat: 'Tingkat Prestasi', lisensi: 'Lisensi Pelatih', fileLisensi: 'File Lisensi',
+    tempat: 'Tempat Latihan', hari: 'Hari Latihan', jam: 'Jam Latihan',
+    cabang: 'Cabang Olahraga', username: 'Username', cabor: 'Cabang Olahraga',
+    role: 'Role', jabatan: 'Jabatan', bio: 'Biodata', foto: 'Foto',
+  };
+  const DETAIL_SKIP = new Set(['id', 'atlitId', 'passwordHash', 'prestasi']);
+  const FILE_KEYS = new Set(['kk', 'akte', 'ktp', 'piagam', 'fileLisensi']);
+
+  const isUrl = (s: string) => /^https?:\/\//i.test(s);
+  // Drive share-link tidak bisa dipakai langsung di <img>; konversi ke endpoint thumbnail
+  function driveImg(u: string): string {
+    const m = u.match(/\/file\/d\/([\w-]+)|[?&]id=([\w-]+)/);
+    return m ? `https://drive.google.com/thumbnail?id=${m[1] || m[2]}&sz=w800` : u;
+  }
+  // potong bagian YYYY-MM-DD langsung dari string (tanpa Date) supaya tidak bergeser oleh timezone
+  const BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+  function prettyDate(s: string): string {
+    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? `${+m[3]} ${BULAN[+m[2] - 1]} ${m[1]}` : s;
   }
 
   onMount(() => {
@@ -103,37 +190,39 @@
   });
 </script>
 
+<svelte:window onkeydown={(e) => e.key === 'Escape' && (detail = null)} />
+
 {#if !auth.user}
   <div class="grid min-h-screen lg:grid-cols-2">
     <!-- Panel kiri: branding -->
-    <div class="login-left relative hidden overflow-hidden bg-linear-to-br from-red-700 via-red-600 to-red-900 lg:flex lg:flex-col lg:justify-center lg:p-14">
+    <div class="login-left relative hidden overflow-hidden bg-linear-to-br from-blue-700 via-blue-600 to-blue-900 lg:flex lg:flex-col lg:justify-center lg:p-14">
       <div class="deco absolute -left-20 -top-20 h-72 w-72 rounded-full bg-white/10"></div>
-      <div class="deco absolute -bottom-24 -right-16 h-80 w-80 rounded-full bg-red-400/20"></div>
+      <div class="deco absolute -bottom-24 -right-16 h-80 w-80 rounded-full bg-blue-400/20"></div>
       <div class="deco absolute right-12 top-16 h-20 w-20 rounded-3xl bg-white/10 rotate-12"></div>
       <div class="relative z-10 text-white">
-        <div class="logo-badge mb-6 grid h-16 w-16 place-items-center rounded-2xl bg-white text-2xl font-bold text-red-600 shadow-xl">BK</div>
+        <div class="logo-badge mb-6 grid h-16 w-16 place-items-center rounded-2xl bg-white text-2xl font-bold text-blue-600 shadow-xl">BK</div>
         <h1 class="text-4xl font-extrabold leading-tight">BINPRES KONI<br />Kota Probolinggo</h1>
-        <p class="mt-4 max-w-sm text-sm leading-relaxed text-red-100">Panel admin Bina Prestasi — kelola data atlit, pelatih, jadwal latihan, dan klub/dojo dari satu tempat.</p>
+        <p class="mt-4 max-w-sm text-sm leading-relaxed text-blue-100">Panel admin Bina Prestasi — kelola data atlit, pelatih, jadwal latihan, dan klub/dojo dari satu tempat.</p>
         <div class="mt-8 flex gap-3">
           {#each ['🏃 Atlit', '🎯 Pelatih', '📅 Jadwal', '🏟️ Klub'] as tag (tag)}
             <span class="login-chip rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold backdrop-blur">{tag}</span>
           {/each}
         </div>
-        <p class="mt-10 text-[11px] text-red-200/80">© 2026 KONI Kota Probolinggo</p>
+        <p class="mt-10 text-[11px] text-blue-200/80">© 2026 KONI Kota Probolinggo</p>
       </div>
     </div>
     <!-- Panel kanan: form -->
     <div class="grid place-items-center bg-white p-6">
       <form onsubmit={doLogin} class="form-card w-full max-w-sm">
-        <div class="logo-badge mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-red-600 text-xl font-bold text-white shadow-lg lg:hidden">BK</div>
+        <div class="logo-badge mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-blue-600 text-xl font-bold text-white shadow-lg lg:hidden">BK</div>
         <h1 class="mb-1 text-2xl font-bold">Selamat Datang 👋</h1>
         <p class="mb-8 text-sm text-gray-400">Masuk untuk mengelola data BINPRES</p>
         <label class="form-field mb-4 block text-sm"><span class="mb-1 block font-medium text-gray-600">Username</span>
-          <input bind:value={username} required placeholder="cth: adminkoni" class="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 outline-none transition focus:border-red-400 focus:bg-white focus:ring-2 focus:ring-red-100" /></label>
+          <input bind:value={username} required placeholder="cth: adminkoni" class="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100" /></label>
         <label class="form-field mb-4 block text-sm"><span class="mb-1 block font-medium text-gray-600">Password</span>
-          <input type="password" bind:value={password} required placeholder="••••••••" class="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 outline-none transition focus:border-red-400 focus:bg-white focus:ring-2 focus:ring-red-100" /></label>
-        {#if loginError}<p class="login-error mb-4 rounded-lg bg-red-50 px-3 py-2 text-center text-xs font-semibold text-red-600">{loginError}</p>{/if}
-        <button type="submit" disabled={busy} class="flex w-full items-center justify-center gap-2 rounded-xl bg-red-600 py-3 text-sm font-semibold text-white shadow-lg shadow-red-600/30 transition hover:bg-red-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60">
+          <input type="password" bind:value={password} required placeholder="••••••••" class="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100" /></label>
+        {#if loginError}<p class="login-error mb-4 rounded-lg bg-blue-50 px-3 py-2 text-center text-xs font-semibold text-blue-600">{loginError}</p>{/if}
+        <button type="submit" disabled={busy} class="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white shadow-lg shadow-blue-600/30 transition hover:bg-blue-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60">
           {#if busy}<span class="spinner"></span> Memproses...{:else}Masuk{/if}
         </button>
       </form>
@@ -142,34 +231,36 @@
 {:else}
 <div class="flex min-h-screen bg-gray-50 font-poppins text-gray-800">
   <!-- Sidebar -->
-  <aside class="sidebar sticky top-0 flex h-screen w-64 shrink-0 flex-col bg-linear-to-b from-red-700 via-red-600 to-red-800 text-white shadow-2xl">
+  <aside class="sidebar sticky top-0 flex h-screen w-64 shrink-0 flex-col bg-linear-to-b from-blue-700 via-blue-600 to-blue-800 text-white shadow-2xl">
     <div class="flex items-center gap-3 px-5 py-6">
-      <div class="logo-badge grid h-11 w-11 place-items-center rounded-xl bg-white text-lg font-bold text-red-600 shadow-lg">BK</div>
+      <div class="logo-badge grid h-11 w-11 place-items-center rounded-xl bg-white text-lg font-bold text-blue-600 shadow-lg">BK</div>
       <div>
         <p class="text-sm font-semibold leading-tight">BINPRES KONI</p>
-        <p class="text-[11px] text-red-100">Kota Probolinggo</p>
+        <p class="text-[11px] text-blue-100">Kota Probolinggo</p>
       </div>
     </div>
 
     <nav class="flex-1 overflow-y-auto px-3 pb-4 text-sm">
-      <button
-        class="sidebar-item mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 transition-colors {view === 'dashboard' ? 'bg-white font-semibold text-red-600 shadow-md' : 'hover:bg-red-500/40'}"
-        onclick={() => navigate('dashboard')}>
-        <span>📊</span> Dashboard
-      </button>
+      {#if isAdmin}
+        <button
+          class="sidebar-item mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 transition-colors {view === 'dashboard' ? 'bg-white font-semibold text-blue-600 shadow-md' : 'hover:bg-blue-500/40'}"
+          onclick={() => navigate('dashboard')}>
+          <span>📊</span> Dashboard
+        </button>
+      {/if}
 
       <button
-        class="sidebar-item mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 transition-colors {openCabang ? 'bg-red-500/30' : 'hover:bg-red-500/40'}"
+        class="sidebar-item mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 transition-colors {openCabang ? 'bg-blue-500/30' : 'hover:bg-blue-500/40'}"
         onclick={() => (openCabang = !openCabang)}>
         <span>🥋</span> Cabang Olahraga
         <span class="ml-auto text-xs transition-transform duration-200 {openCabang ? 'rotate-90' : ''}">▶</span>
       </button>
 
       {#if openCabang}
-        <div class="ml-4 flex flex-col gap-1 border-l border-red-400/50 pl-3">
-          {#each sections.filter((s) => s.id !== 'users') as s (s.id)}
+        <div class="ml-4 flex flex-col gap-1 border-l border-blue-400/50 pl-3">
+          {#each menuSections.filter((s) => !['users', 'pengurus'].includes(s.id)) as s (s.id)}
             <button
-              class="sidebar-item flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] transition-colors {view === s.id ? 'bg-white font-semibold text-red-600 shadow' : 'text-red-100 hover:bg-red-500/40'}"
+              class="sidebar-item flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] transition-colors {view === s.id ? 'bg-white font-semibold text-blue-600 shadow' : 'text-blue-100 hover:bg-blue-500/40'}"
               onclick={() => navigate(s.id)}>
               <span>{s.icon}</span> {s.label}
             </button>
@@ -177,28 +268,30 @@
         </div>
       {/if}
 
-      <p class="sidebar-item mt-4 mb-1 px-3 text-[10px] font-semibold uppercase tracking-widest text-red-200">Sistem</p>
-      {#each sections.filter((s) => s.id === 'users') as s (s.id)}
-        <button
-          class="sidebar-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 transition-colors {view === s.id ? 'bg-white font-semibold text-red-600 shadow-md' : 'hover:bg-red-500/40'}"
-          onclick={() => navigate(s.id)}>
-          <span>{s.icon}</span> {s.label}
-        </button>
-      {/each}
+      {#if isAdmin}
+        <p class="sidebar-item mt-4 mb-1 px-3 text-[10px] font-semibold uppercase tracking-widest text-blue-200">Sistem</p>
+        {#each sections.filter((s) => ['users', 'pengurus'].includes(s.id)) as s (s.id)}
+          <button
+            class="sidebar-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 transition-colors {view === s.id ? 'bg-white font-semibold text-blue-600 shadow-md' : 'hover:bg-blue-500/40'}"
+            onclick={() => navigate(s.id)}>
+            <span>{s.icon}</span> {s.label}
+          </button>
+        {/each}
+      {/if}
     </nav>
 
-    <div class="mx-4 mb-5 rounded-xl bg-red-900/40 p-3 text-[11px] text-red-100">
-      <p>{auth.user.nama} <span class="text-red-200">({auth.user.cabor})</span></p>
+    <div class="mx-4 mb-5 rounded-xl bg-blue-900/40 p-3 text-[11px] text-blue-100">
+      <p>{auth.user.nama} <span class="text-blue-200">({auth.user.cabor})</span></p>
       <button class="mt-2 w-full rounded-lg bg-white/10 py-1.5 font-semibold text-white transition hover:bg-white/20" onclick={() => logout()}>Logout</button>
     </div>
   </aside>
 
   <!-- Main -->
   <main class="flex-1 p-6 lg:p-8">
-    {#if view === 'dashboard'}
-      <div class="content-card mb-6 overflow-hidden rounded-2xl bg-linear-to-r from-red-600 to-red-500 p-6 text-white shadow-xl">
+    {#if view === 'dashboard' && isAdmin}
+      <div class="content-card mb-6 overflow-hidden rounded-2xl bg-linear-to-r from-blue-600 to-blue-500 p-6 text-white shadow-xl">
         <p class="text-xl font-bold">Selamat Datang, Admin BINPRES 👋</p>
-        <p class="mt-1 text-sm text-red-100">Panel admin Bina Prestasi KONI Kota Probolinggo — kelola data atlit, pelatih, jadwal latihan, dan klub.</p>
+        <p class="mt-1 text-sm text-blue-100">Panel admin Bina Prestasi KONI Kota Probolinggo — kelola data atlit, pelatih, jadwal latihan, dan klub.</p>
       </div>
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {#each sections as s (s.id)}
@@ -212,14 +305,66 @@
           <button
             class="content-card group relative overflow-hidden rounded-2xl bg-white p-5 text-left shadow-lg ring-1 ring-gray-100 transition-transform duration-200 hover:-translate-y-1"
             onclick={() => navigate(s.id)}>
-            <div class="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-red-50 transition-transform duration-300 group-hover:scale-125"></div>
+            <div class="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-blue-50 transition-transform duration-300 group-hover:scale-125"></div>
             <span class="relative text-3xl">{s.icon}</span>
-            <p class="relative mt-3 text-3xl font-bold text-red-600">{s.rows.length}</p>
+            <p class="relative mt-3 text-3xl font-bold text-blue-600">{s.rows.length}</p>
             <p class="relative text-sm text-gray-500">Total {s.label}</p>
-            <span class="relative mt-2 inline-block text-xs font-semibold text-red-500 opacity-0 transition-opacity group-hover:opacity-100">Kelola →</span>
+            <span class="relative mt-2 inline-block text-xs font-semibold text-blue-500 opacity-0 transition-opacity group-hover:opacity-100">Kelola →</span>
           </button>
           {/if}
         {/each}
+      </div>
+
+      <!-- Statistik per cabor & tingkat prestasi -->
+      {#snippet bars(rows: { name: string; count: number }[], max: number)}
+        {#each rows as x (x.name)}
+          <div class="flex items-center gap-3 py-1.5">
+            <span class="w-24 shrink-0 truncate text-xs font-medium text-gray-600" title={x.name}>{x.name}</span>
+            <div class="h-2.5 flex-1 overflow-hidden rounded-full bg-gray-100">
+              <div class="h-full rounded-full bg-linear-to-r from-blue-500 to-blue-600 transition-all duration-700" style={`width:${(x.count / max) * 100}%`}></div>
+            </div>
+            <span class="w-8 shrink-0 text-right text-xs font-bold text-blue-600">{x.count}</span>
+          </div>
+        {/each}
+      {/snippet}
+
+      {#snippet caborPanel(icon: string, title: string, rows: { name: string; count: number }[], max: number, totalLabel: string)}
+        <div class="content-card rounded-2xl bg-white p-5 shadow-lg ring-1 ring-gray-100">
+          <div class="mb-3 flex items-center justify-between">
+            <p class="flex items-center gap-2 font-bold">{icon} {title}</p>
+            <span class="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-600">{ui.loaded ? totalLabel : '…'}</span>
+          </div>
+          {#if !ui.loaded}
+            {#each Array(4) as _, i (i)}<div class="mb-3 h-2.5 w-full animate-pulse rounded-full bg-gray-100"></div>{/each}
+          {:else}
+            <div class="max-h-64 overflow-y-auto pr-1">{@render bars(rows, max)}</div>
+          {/if}
+        </div>
+      {/snippet}
+
+      <div class="mt-6 grid gap-4 xl:grid-cols-3">
+        {@render caborPanel('🏃', 'Atlit / Cabor', atlitPerCabor, maxA, `${allRows.atlit.length} atlit`)}
+        {@render caborPanel('🎯', 'Pelatih / Cabor', pelatihPerCabor, maxP, `${allRows.pelatih.length} pelatih`)}
+        {@render caborPanel('🏟️', 'Klub/Dojang / Cabor', klubPerCabor, maxK, `${allRows.klub.length} klub/dojang`)}
+      </div>
+
+      <div class="content-card mt-4 rounded-2xl bg-white p-5 shadow-lg ring-1 ring-gray-100">
+        <p class="mb-4 flex items-center gap-2 font-bold">🏅 Prestasi Berdasarkan Tingkat</p>
+        {#if !ui.loaded}
+          <div class="grid gap-3 sm:grid-cols-3">
+            {#each Array(3) as _, i (i)}<div class="h-20 animate-pulse rounded-xl bg-gray-100"></div>{/each}
+          </div>
+        {:else}
+          <div class="grid gap-3 sm:grid-cols-3">
+            {#each prestasiTingkat.rows as t (t.name)}
+              <div class="rounded-xl bg-linear-to-br from-blue-50 to-blue-100/50 p-4 ring-1 ring-blue-100">
+                <p class="text-xs font-semibold uppercase tracking-wide text-blue-600">{tingkatIcon[t.name] ?? '🏅'} {t.name}</p>
+                <p class="mt-1 text-2xl font-extrabold text-gray-800">{t.count}</p>
+              </div>
+            {/each}
+          </div>
+          <p class="mt-3 text-right text-[11px] text-gray-400">Total prestasi tercatat: {prestasiTingkat.total}</p>
+        {/if}
       </div>
     {:else if active}
       <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
@@ -228,7 +373,7 @@
         </h1>
         <a
           href="/admin/{active.id}/tambah"
-          class="rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-red-600/30 transition hover:bg-red-700 active:scale-95">
+          class="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-600/30 transition hover:bg-blue-700 active:scale-95">
           + Tambah {active.label}
         </a>
       </div>
@@ -239,12 +384,12 @@
           placeholder="🔍 Cari {active.label.toLowerCase()}..."
           bind:value={search}
           oninput={() => (page = 1)}
-          class="mb-4 w-full max-w-sm rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-red-400 focus:bg-white focus:ring-2 focus:ring-red-100" />
+          class="mb-4 w-full max-w-sm rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100" />
 
         <div class="overflow-x-auto">
           <table class="w-full text-left text-sm">
             <thead>
-              <tr class="border-b-2 border-red-100 text-xs uppercase tracking-wide text-red-600">
+              <tr class="border-b-2 border-blue-100 text-xs uppercase tracking-wide text-blue-600">
                 <th class="px-3 py-3">No</th>
                 {#each active.fields as f (f.key)}
                   <th class="px-3 py-3">{f.label}</th>
@@ -263,14 +408,17 @@
                 {/each}
               {:else}
               {#each paged as row, i (page + '-' + ((page - 1) * perPage + i))}
-                <tr class="border-b border-gray-100 transition-colors hover:bg-red-50/50">
+                <tr class="cursor-pointer border-b border-gray-100 transition-colors hover:bg-blue-50/50" onclick={() => (detail = row)}>
                   <td class="px-3 py-3 text-gray-400">{(page - 1) * perPage + i + 1}</td>
                   {#each active.fields as f (f.key)}
-                    <td class="px-3 py-3 font-medium">{row[f.key]}</td>
+                    <td class="px-3 py-3 font-medium">
+                      {#if f.type === 'date'}{prettyDate(String(row[f.key] ?? ''))}{:else}{row[f.key]}{/if}
+                    </td>
                   {/each}
                   <td class="whitespace-nowrap px-3 py-3 text-right">
-                    <button disabled={busy} class="rounded-lg bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-200 disabled:opacity-50" onclick={() => goToEdit(i)}>✏️ Edit</button>
-                    <button disabled={busy} class="ml-1 rounded-lg bg-red-100 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-200 disabled:opacity-50" onclick={() => remove(i)}>{#if busy}⏳{:else}🗑️{/if} Hapus</button>
+                    <button disabled={busy} class="rounded-lg bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-200 disabled:opacity-50" onclick={(e) => { e.stopPropagation(); detail = row; }}>👁️ Detail</button>
+                    <button disabled={busy} class="ml-1 rounded-lg bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-200 disabled:opacity-50" onclick={(e) => { e.stopPropagation(); goToEdit(i); }}>✏️ Edit</button>
+                    <button disabled={busy} class="ml-1 rounded-lg bg-red-100 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-200 disabled:opacity-50" onclick={(e) => { e.stopPropagation(); remove(i); }}>{#if busy}⏳{:else}🗑️{/if} Hapus</button>
                   </td>
                 </tr>
               {:else}
@@ -284,15 +432,94 @@
         <div class="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm">
           <span class="text-gray-500">Halaman {page} dari {totalPages} · {filtered.length} data</span>
           <div class="flex gap-1">
-            <button class="rounded-lg border px-3 py-1.5 transition {page === 1 ? 'text-gray-300' : 'hover:bg-red-50'}" disabled={page === 1} onclick={() => page--}>‹ Prev</button>
+            <button class="rounded-lg border px-3 py-1.5 transition {page === 1 ? 'text-gray-300' : 'hover:bg-blue-50'}" disabled={page === 1} onclick={() => page--}>‹ Prev</button>
             {#each Array(totalPages) as _, i (i)}
-              <button class="rounded-lg border px-3 py-1.5 font-semibold transition {page === i + 1 ? 'border-red-600 bg-red-600 text-white' : 'hover:bg-red-50'}" onclick={() => (page = i + 1)}>{i + 1}</button>
+              <button class="rounded-lg border px-3 py-1.5 font-semibold transition {page === i + 1 ? 'border-blue-600 bg-blue-600 text-white' : 'hover:bg-blue-50'}" onclick={() => (page = i + 1)}>{i + 1}</button>
             {/each}
-            <button class="rounded-lg border px-3 py-1.5 transition {page === totalPages ? 'text-gray-300' : 'hover:bg-red-50'}" disabled={page === totalPages} onclick={() => page++}>Next ›</button>
+            <button class="rounded-lg border px-3 py-1.5 transition {page === totalPages ? 'text-gray-300' : 'hover:bg-blue-50'}" disabled={page === totalPages} onclick={() => page++}>Next ›</button>
           </div>
         </div>
       </div>
     {/if}
   </main>
+
+  <!-- ==== MODAL DETAIL ==== -->
+  {#if detail}
+    <div class="fixed inset-0 z-50 p-4">
+      <button
+        type="button"
+        aria-label="Tutup detail"
+        class="absolute inset-0 h-full w-full cursor-default bg-blue-950/50 backdrop-blur-sm"
+        in:fade={{ duration: 150 }}
+        onclick={() => (detail = null)}></button>
+      <div
+        role="dialog"
+        aria-modal="true"
+        tabindex="-1"
+        class="relative mx-auto mt-[7vh] max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white shadow-2xl ring-1 ring-gray-100 focus:outline-none"
+        in:scale={{ start: 0.95, duration: 180 }}
+        out:fade={{ duration: 150 }}>
+        <div class="flex items-center justify-between border-b border-gray-100 px-6 py-4">
+          <p class="flex items-center gap-2 font-bold">
+            <span>{active?.icon}</span> Detail {active?.label}
+          </p>
+          <button class="grid h-8 w-8 place-items-center rounded-full bg-gray-100 text-sm transition hover:bg-blue-100" onclick={() => (detail = null)} aria-label="Tutup detail">✕</button>
+        </div>
+
+        <div class="grid gap-x-6 gap-y-3 px-6 py-5 sm:grid-cols-[150px_1fr]">
+          {#each Object.entries(detail) as [k, v] (k)}
+            {#if !DETAIL_SKIP.has(k)}
+              {@const s = String(v ?? '').trim()}
+              <span class="pt-0.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400">{DETAIL_LABELS[k] ?? k}</span>
+              <div class="text-sm">
+                {#if !s}
+                  <span class="text-gray-300">—</span>
+                {:else if k === 'foto' || k === 'bio'}
+                  {#if isUrl(s)}<a href={s} target="_blank" rel="noopener"><img src={driveImg(s)} alt={s} class="max-h-52 w-full rounded-xl object-cover ring-1 ring-gray-200 transition hover:ring-blue-300" /></a>{:else}{s}{/if}
+                {:else if FILE_KEYS.has(k)}
+                  {#if isUrl(s)}
+                    <a href={s} target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 underline underline-offset-2 ring-1 ring-blue-100 hover:bg-blue-100">📎 Buka berkas</a>
+                  {:else}
+                    <span class="inline-flex items-center gap-1.5 rounded-full bg-gray-50 px-3 py-1 text-xs font-semibold text-gray-500 ring-1 ring-gray-200">📎 {s}</span>
+                  {/if}
+                {:else if k === 'tanggalLahir'}
+                  {prettyDate(s)}
+                {:else if isUrl(s)}
+                  <a href={s} target="_blank" rel="noopener" class="font-medium text-blue-600 underline underline-offset-2 hover:text-blue-800">📎 Buka berkas</a>
+                {:else}
+                  {s}
+                {/if}
+              </div>
+            {/if}
+          {/each}
+        </div>
+
+        {#if Array.isArray(detail.prestasi) && detail.prestasi.length}
+          <div class="border-t border-gray-100 px-6 py-5">
+            <p class="mb-3 text-[11px] font-bold uppercase tracking-widest text-gray-400">🏅 Daftar Prestasi</p>
+            <ul class="flex flex-col gap-2">
+              {#each detail.prestasi as p, i (i)}
+                <li class="rounded-xl bg-blue-50/70 p-3 ring-1 ring-blue-100/60">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="rounded-full bg-blue-600 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">{String(p.tingkat || '-')}</span>
+                    <span class="text-xs font-medium text-gray-500">{String(p.tahun || '-')}</span>
+                    <p class="text-sm font-semibold">{String(p.nama || 'Prestasi')}</p>
+                  </div>
+                  {#if String(p.piagam || '').trim()}
+                    {@const pu = String(p.piagam).trim()}
+                    {#if isUrl(pu)}
+                      <a href={pu} target="_blank" rel="noopener" class="mt-2 inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-xs font-semibold text-blue-700 underline underline-offset-2 ring-1 ring-blue-100 hover:bg-blue-50">📎 Piagam — buka berkas</a>
+                    {:else}
+                      <span class="mt-2 inline-flex items-center gap-1.5 rounded-full bg-gray-50 px-3 py-1 text-xs font-semibold text-gray-500 ring-1 ring-gray-200">📎 {pu}</span>
+                    {/if}
+                  {/if}
+                </li>
+              {/each}
+            </ul>
+          </div>
+        {/if}
+      </div>
+    </div>
+  {/if}
 </div>
 {/if}

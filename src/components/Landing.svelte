@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
+  import { CABOR, db, ui, refresh } from '../lib/store.svelte';
   import gsap from 'gsap';
   import { ScrollTrigger } from 'gsap/ScrollTrigger';
 
@@ -7,44 +8,56 @@
 
   let {
     heroImage,
-    pengurus,
+    photos, // fallback foto untuk row tanpa URL foto
   }: {
     heroImage: string;
-    pengurus: { nama: string; jabatan: string; bio: string; foto: string }[];
+    photos: string[];
   } = $props();
 
   let expanded = $state(-1);
-  let counts = $state({ atlit: 0, pelatih: 0, klub: 0, loaded: false });
 
-  const ENDPOINT: string = (import.meta.env.PUBLIC_GAS_ENDPOINT || '') as string;
+  // statistik live dari spreadsheet (via store)
+  const countOf = (id: string) => db.sections.find((s) => s.id === id)?.rows.length ?? 0;
+  const stats = $derived({ atlit: countOf('atlit'), pelatih: countOf('pelatih'), klub: countOf('klub') });
 
-  async function loadCounts() {
-    if (!ENDPOINT) {
-      counts = { atlit: 12, pelatih: 8, klub: 5, loaded: true }; // fallback demo
-      return;
-    }
-    try {
-      const j = await (await fetch(`${ENDPOINT}?sheet=all`)).json();
-      counts = {
-        atlit: j.data?.atlit?.length ?? 0,
-        pelatih: j.data?.pelatih?.length ?? 0,
-        klub: j.data?.['klub/dojang/perguruan']?.length ?? 0,
-        loaded: true,
-      };
-    } catch {
-      counts = { ...counts, loaded: true };
-    }
+  // Drive share-link tidak bisa dipakai langsung di <img>; konversi ke endpoint thumbnail
+  function driveImg(u: string): string {
+    const m = u.match(/\/file\/d\/([\w-]+)|[?&]id=([\w-]+)/);
+    return m ? `https://drive.google.com/thumbnail?id=${m[1] || m[2]}&sz=w800` : u;
   }
 
-  // angka naik 0 → nilai
+  // pengurus live dari spreadsheet
+  const cards = $derived(
+    (db.sections.find((s) => s.id === 'pengurus')?.rows ?? []).map((p, i) => ({
+      nama: String(p.nama ?? ''),
+      jabatan: String(p.jabatan ?? ''),
+      bio: String(p.bio ?? ''),
+      foto: p.foto ? driveImg(String(p.foto)) : photos[i % photos.length],
+    }))
+  );
+
+  // angka naik dari nilai yang sedang tampil ke nilai baru (aman dipanggil berulang)
+  const shown = new WeakMap<HTMLElement, number>();
+  const tweens = new WeakMap<HTMLElement, any>();
+
   function countUp(el: HTMLElement, target: number) {
-    const obj = { v: 0 };
-    gsap.to(obj, {
-      v: target,
-      duration: 1.4,
-      ease: 'power2.out',
-      onUpdate: () => (el.textContent = String(Math.round(obj.v))),
-    });
+    const cur = shown.get(el) ?? 0;
+    if (cur === target) return;
+    tweens.get(el)?.kill();
+    const obj = { v: cur };
+    tweens.set(
+      el,
+      gsap.to(obj, {
+        v: target,
+        duration: 1.4,
+        ease: 'power2.out',
+        onUpdate: () => {
+          const val = Math.round(obj.v);
+          el.textContent = String(val);
+          shown.set(el, val);
+        },
+      })
+    );
   }
 
   let xTo = $state<any>({});
@@ -66,7 +79,8 @@
   }
 
   onMount(() => {
-    loadCounts();
+    // polling ringan agar statistik ter-update jika data diubah dari tempat lain (refresh dedup)
+    const poll = setInterval(() => refresh(), 60_000);
     const mm = gsap.matchMedia();
     mm.add('(prefers-reduced-motion: no-preference)', () => {
       // hero entrance
@@ -125,23 +139,27 @@
         yTo = {};
       };
     });
-    return () => mm.revert();
+    return () => {
+      clearInterval(poll);
+      mm.revert();
+    };
   });
 
+  // realtime: efek reaktif terhadap perubahan nilai ATAU status data pertama dari GAS
   $effect(() => {
-    if (counts.loaded) {
-      document.querySelectorAll<HTMLElement>('.stat-num').forEach((el) => {
-        countUp(el, Number(el.dataset.target ?? 0));
-      });
-    }
+    void ui.loaded;
+    const targets = [stats.atlit, stats.pelatih, stats.klub];
+    document.querySelectorAll<HTMLElement>('.stat-num').forEach((el, i) => {
+      countUp(el, targets[i] ?? 0);
+    });
   });
 </script>
 
 <div class="min-h-screen overflow-x-clip bg-white font-poppins text-gray-800">
   <!-- ==== HERO ==== -->
-  <section class="relative overflow-hidden bg-linear-to-br from-red-700 via-red-600 to-red-800 text-white">
+  <section class="relative overflow-hidden bg-linear-to-br from-blue-700 via-blue-600 to-blue-800 text-white">
     <div class="ornament absolute -left-24 top-10 h-72 w-72 rounded-full bg-white/10"></div>
-    <div class="ornament absolute right-1/3 -top-32 h-96 w-96 rounded-full bg-red-400/20"></div>
+    <div class="ornament absolute right-1/3 -top-32 h-96 w-96 rounded-full bg-blue-400/20"></div>
     <div class="ornament absolute -bottom-24 -right-10 h-80 w-80 rounded-3xl bg-white/5 rotate-12"></div>
 
     <div class="relative mx-auto grid max-w-6xl items-center gap-10 px-6 py-20 lg:grid-cols-2 lg:py-28">
@@ -150,11 +168,11 @@
         <h1 class="hero-title mt-5 text-4xl font-extrabold leading-tight lg:text-5xl">
           {#each ['Bina', 'Prestasi,', 'Wujudkan', 'Juara', 'Muda'] as w, i (i)}<span class="word inline-block">{w}&nbsp;</span>{/each}
         </h1>
-        <p class="hero-desc mt-5 max-w-md text-sm leading-relaxed text-red-100">
+        <p class="hero-desc mt-5 max-w-md text-sm leading-relaxed text-blue-100">
           BINPRES KONI Kota Probolinggo membina atlet muda berbakat lintas cabang olahraga — dari pembinaan prestasi, pembinaan pelatih profesional, hingga fasilitasi klub/dojo di Kota Probolinggo.
         </p>
         <div class="mt-8 flex flex-wrap gap-3">
-          <a href="#pengurus" class="rounded-xl bg-white px-6 py-3 text-sm font-semibold text-red-600 shadow-xl transition hover:scale-105 active:scale-95">Lihat Pengurus</a>
+          <a href="#pengurus" class="rounded-xl bg-white px-6 py-3 text-sm font-semibold text-blue-600 shadow-xl transition hover:scale-105 active:scale-95">Lihat Pengurus</a>
           <a href="/admin" class="rounded-xl border border-white/40 px-6 py-3 text-sm font-semibold backdrop-blur transition hover:bg-white/10">Gabung Sekarang</a>
         </div>
       </div>
@@ -170,8 +188,8 @@
             <div class="shine absolute inset-0 rounded-2xl bg-linear-to-tr from-transparent via-white/25 to-transparent"></div>
             <span class="text-xl leading-none">🏃</span>
             <div>
-              <p class="stat-num text-2xl font-extrabold leading-none" data-target={counts.atlit}>0</p>
-              <p class="mt-1 text-[11px] font-medium leading-tight text-red-50/90">Atlit Terdaftar</p>
+              <p class="stat-num text-2xl font-extrabold leading-none" data-target={stats.atlit}>0</p>
+              <p class="mt-1 text-[11px] font-medium leading-tight text-white/90">Atlit Terdaftar</p>
             </div>
           </div>
         </div>
@@ -180,8 +198,8 @@
             <div class="shine absolute inset-0 rounded-2xl bg-linear-to-tr from-transparent via-white/25 to-transparent"></div>
             <span class="text-xl leading-none">🎯</span>
             <div>
-              <p class="stat-num text-2xl font-extrabold leading-none" data-target={counts.pelatih}>0</p>
-              <p class="mt-1 text-[11px] font-medium leading-tight text-red-50/90">Pelatih Terdaftar</p>
+              <p class="stat-num text-2xl font-extrabold leading-none" data-target={stats.pelatih}>0</p>
+              <p class="mt-1 text-[11px] font-medium leading-tight text-white/90">Pelatih Terdaftar</p>
             </div>
           </div>
         </div>
@@ -190,8 +208,8 @@
             <div class="shine absolute inset-0 rounded-2xl bg-linear-to-tr from-transparent via-white/25 to-transparent"></div>
             <span class="text-xl leading-none">🏟️</span>
             <div>
-              <p class="stat-num text-2xl font-extrabold leading-none" data-target={counts.klub}>0</p>
-              <p class="mt-1 text-[11px] font-medium leading-tight text-red-50/90">Perguruan Terdaftar</p>
+              <p class="stat-num text-2xl font-extrabold leading-none" data-target={stats.klub}>0</p>
+              <p class="mt-1 text-[11px] font-medium leading-tight text-white/90">Perguruan Terdaftar</p>
             </div>
           </div>
         </div>
@@ -202,83 +220,95 @@
   <!-- ==== PENGURUS ==== -->
   <section id="pengurus" class="relative overflow-hidden py-20">
     <!-- ornamen background -->
-    <div class="ornament absolute left-10 top-16 h-24 w-24 rounded-3xl bg-red-100"></div>
-    <div class="ornament absolute right-16 top-40 h-32 w-32 rounded-full bg-red-50"></div>
-    <div class="ornament absolute bottom-24 left-1/3 h-16 w-16 rotate-12 rounded-2xl bg-red-100"></div>
-    <div class="ornament absolute bottom-10 right-1/4 h-20 w-20 rounded-full bg-red-50"></div>
-    <div class="ornament absolute left-1/2 top-1/2 h-40 w-40 -translate-x-1/2 rounded-full border-2 border-dashed border-red-100"></div>
+    <div class="ornament absolute left-10 top-16 h-24 w-24 rounded-3xl bg-blue-100"></div>
+    <div class="ornament absolute right-16 top-40 h-32 w-32 rounded-full bg-blue-50"></div>
+    <div class="ornament absolute bottom-24 left-1/3 h-16 w-16 rotate-12 rounded-2xl bg-blue-100"></div>
+    <div class="ornament absolute bottom-10 right-1/4 h-20 w-20 rounded-full bg-blue-50"></div>
+    <div class="ornament absolute left-1/2 top-1/2 h-40 w-40 -translate-x-1/2 rounded-full border-2 border-dashed border-blue-100"></div>
 
     <div class="relative mx-auto max-w-6xl px-6">
       <div class="mb-10 text-center">
-        <span class="text-xs font-bold uppercase tracking-[0.25em] text-red-500">Struktur Organisasi</span>
+        <span class="text-xs font-bold uppercase tracking-[0.25em] text-white/800">Struktur Organisasi</span>
         <h2 class="mt-2 text-3xl font-extrabold">Pengurus BINPRES KONI</h2>
         <p class="mx-auto mt-2 max-w-md text-sm text-gray-400">Klik kartu untuk melihat biodata pengurus</p>
       </div>
 
-      <div class="flex flex-col gap-4 lg:flex-row">
-        {#each pengurus as p, i (i)}
+      {#if !ui.loaded}
+        <!-- skeleton saat menunggu data GAS -->
+        <div class="flex flex-col gap-4 lg:flex-row">
+          {#each Array(5) as _, i (i)}
+            <div class="h-105 shrink-0 flex-1 animate-pulse rounded-3xl bg-blue-50"></div>
+          {/each}
+        </div>
+      {:else}
+        <div class="flex flex-col gap-4 lg:flex-row">
+        {#each cards as p, i (i)}
           <button
-            class="pengurus-card group relative h-105 shrink-0 overflow-hidden rounded-3xl bg-red-600 text-left text-white shadow-xl ring-1 ring-red-200 transition-all duration-500 ease-out {expanded === i ? 'lg:grow-[3.5] lg:basis-0' : 'lg:grow lg:basis-0 hover:-translate-y-1'}"
+            class="pengurus-card group relative h-105 shrink-0 overflow-hidden rounded-3xl bg-blue-600 text-left text-white shadow-xl ring-1 ring-blue-200 transition-all duration-500 ease-out {expanded === i ? 'lg:grow-[3.5] lg:basis-0' : 'lg:grow lg:basis-0 hover:-translate-y-1'}"
             onclick={() => (expanded = expanded === i ? -1 : i)}>
             <img src={p.foto} alt={p.nama} class="absolute inset-x-0 top-0 h-72 w-full object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy" />
               <div class="absolute inset-x-0 bottom-0 p-5">
               <p class="text-base font-bold">{p.nama}</p>
-              <p class="mt-0.5 text-xs font-medium text-red-100">{p.jabatan}</p>
+              <p class="mt-0.5 text-xs font-medium text-blue-100">{p.jabatan}</p>
 
               <!-- panel biodata: muncul saat expand (mobile: fade-in; desktop: muncul dari kanan) -->
               <div class="grid transition-all duration-500 {expanded === i ? 'mt-3 grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}">
                 <div class="overflow-hidden">
-                  <p class="max-w-md text-[12.5px] leading-relaxed text-red-50">{p.bio}</p>
+                  <p class="max-w-md text-[12.5px] leading-relaxed text-white/80">{p.bio}</p>
                 </div>
               </div>
             </div>
             <span class="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full bg-white/20 text-xs backdrop-blur transition-transform duration-500 {expanded === i ? 'rotate-45' : ''}">✕</span>
           </button>
         {/each}
-      </div>
+        </div>
+        {#if cards.length === 0}
+          <p class="py-10 text-center text-sm text-gray-400">Data pengurus akan segera diperbarui.</p>
+        {/if}
+      {/if}
     </div>
   </section>
 
   <!-- ==== FOOTER ==== -->
-  <footer class="relative overflow-hidden bg-linear-to-br from-red-700 via-red-600 to-red-800 text-white">
+  <footer class="relative overflow-hidden bg-linear-to-br from-blue-700 via-blue-600 to-blue-800 text-white">
     <div class="ornament absolute -left-20 -top-20 h-64 w-64 rounded-full bg-white/10"></div>
-    <div class="ornament absolute -bottom-24 -right-16 h-72 w-72 rounded-full bg-red-400/20"></div>
+    <div class="ornament absolute -bottom-24 -right-16 h-72 w-72 rounded-full bg-blue-400/20"></div>
 
     <div class="relative mx-auto grid max-w-6xl gap-10 px-6 py-14 sm:grid-cols-2 lg:grid-cols-4">
       <div>
         <div class="flex items-center gap-3">
-          <div class="grid h-11 w-11 place-items-center rounded-xl bg-white text-lg font-bold text-red-600 shadow-lg">BK</div>
+          <div class="grid h-11 w-11 place-items-center rounded-xl bg-white text-lg font-bold text-blue-600 shadow-lg">BK</div>
           <div>
             <p class="text-sm font-bold leading-tight">BINPRES KONI</p>
-            <p class="text-[11px] text-red-100">Kota Probolinggo</p>
+            <p class="text-[11px] text-blue-100">Kota Probolinggo</p>
           </div>
         </div>
-        <p class="mt-4 text-xs leading-relaxed text-red-100/90">
+        <p class="mt-4 text-xs leading-relaxed text-blue-100/90">
           Komite Nasional Olahraga Indonesia — Pembinaan Prestasi Olahraga Kota Probolinggo. Membina atlet muda berbakat lintas cabang olahraga menuju prestasi nasional.
         </p>
       </div>
 
       <div>
-        <p class="mb-4 text-xs font-bold uppercase tracking-widest text-red-200">Navigasi</p>
-        <ul class="flex flex-col gap-2.5 text-xs text-red-100">
-          <li><a href="#" class="transition hover:text-white hover:underline">Beranda</a></li>
+        <p class="mb-4 text-xs font-bold uppercase tracking-widest text-blue-200">Navigasi</p>
+        <ul class="flex flex-col gap-2.5 text-xs text-blue-100">
+          <li><a href="/" class="transition hover:text-white hover:underline">Beranda</a></li>
           <li><a href="#pengurus" class="transition hover:text-white hover:underline">Pengurus</a></li>
           <li><a href="/admin" class="transition hover:text-white hover:underline">Panel Admin</a></li>
         </ul>
       </div>
 
       <div>
-        <p class="mb-4 text-xs font-bold uppercase tracking-widest text-red-200">Cabang Olahraga</p>
-        <ul class="flex flex-col gap-2.5 text-xs text-red-100">
-          {#each ['Taekwondo', 'Karate', 'Pencak Silat', 'Sepak Bola', 'Bola Voli'] as c (c)}
-            <li>{c}</li>
+        <p class="mb-4 text-xs font-bold uppercase tracking-widest text-blue-200">Cabang Olahraga</p>
+        <ul class="grid max-h-40 grid-cols-2 gap-x-3 gap-y-1.5 overflow-y-auto pr-1 text-[11px] text-blue-100">
+          {#each CABOR as c (c)}
+            <li class="truncate">{c}</li>
           {/each}
         </ul>
       </div>
 
       <div>
-        <p class="mb-4 text-xs font-bold uppercase tracking-widest text-red-200">Kontak</p>
-        <ul class="flex flex-col gap-2.5 text-xs text-red-100">
+        <p class="mb-4 text-xs font-bold uppercase tracking-widest text-blue-200">Kontak</p>
+        <ul class="flex flex-col gap-2.5 text-xs text-blue-100">
           <li>📍 Jl. Mayangan, Kota Probolinggo, Jawa Timur</li>
           <li>📞 (0335) 000000</li>
           <li>✉️ info@koniprobolinggo.go.id</li>
@@ -286,8 +316,8 @@
       </div>
     </div>
 
-    <div class="relative border-t border-white/15 py-5 text-center text-[11px] text-red-200">
-      © 2026 BINPRES KONI Kota Probolinggo · made with <span class=" animate-pulse">💙</span> by <a href="https://raybrilliant.my.id" class="italic text-amber-200">raybrilliant</a>
+    <div class="relative border-t border-white/15 py-5 text-center text-[11px] text-blue-200">
+      © 2026 BINPRES KONI Kota Probolinggo · made with <span class=" animate-pulse">❤️</span> by <a href="https://raybrilliant.my.id" class="italic text-amber-200">raybrilliant</a>
     </div>
   </footer>
 </div>

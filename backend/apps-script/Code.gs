@@ -1,23 +1,55 @@
 const SPREADSHEET_ID = "1oMthq7zz9FZBQBc8IkO6FSvOhNaE6-kGDfqH4eecq-E";
-const SHEET_NAME = ["atlit", "prestasi", "pelatih", "jadwal_latihan", "klub/dojang/perguruan", "users"];
 
 // Kolom tiap sheet (baris 1 spreadsheet harus persis seperti ini, urut)
 const SCHEMA = {
-  "atlit": ["id", "nama", "tempatLahir", "tanggalLahir", "jenisKelamin", "alamat", "kk", "akte", "ktp"],
+  "atlit": ["id", "nama", "tempatLahir", "tanggalLahir", "jenisKelamin", "alamat", "kk", "akte", "ktp", "cabor", "createdBy"],
   "prestasi": ["id", "atlitId", "nama", "tahun", "tingkat", "piagam"],
-  "pelatih": ["id", "nama", "alamat", "jenisKelamin", "lisensi", "fileLisensi"],
-  "jadwal_latihan": ["id", "tempat", "hari", "jam"],
-  "klub/dojang/perguruan": ["id", "nama", "cabang", "alamat"],
+  "pelatih": ["id", "nama", "alamat", "jenisKelamin", "lisensi", "fileLisensi", "cabor", "createdBy"],
+  "jadwal_latihan": ["id", "tempat", "hari", "jam", "createdBy"],
+  "klub/dojang/perguruan": ["id", "nama", "cabang", "alamat", "createdBy"],
   "users": ["id", "nama", "username", "passwordHash", "cabor", "role"],
   "pengurus": ["id", "nama", "jabatan", "bio", "foto"],
 };
 
-// ==== SETUP: jalankan sekali dari editor Apps Script untuk buat header ====
+// ==== SETUP: aman dijalankan ulang kapan saja ====
+// - Sheet baru dibuat lengkap
+// - Header lama dimigrasi ke skema terbaru; DATA DIGESER sesuai pemetaan kolom
+// - Kolom tidak dikenal dari versi lama akan di-drop
 function setup() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   Object.entries(SCHEMA).forEach(([name, cols]) => {
-    const sheet = ss.getSheetByName(name) || ss.insertSheet(name);
-    sheet.getRange(1, 1, 1, cols.length).setValues([cols]).setFontWeight("bold");
+    let sh = ss.getSheetByName(name);
+    if (!sh) {
+      ss.insertSheet(name);
+      sh = ss.getSheetByName(name);
+    }
+    const lastRow = sh.getLastRow();
+    if (lastRow === 0) {
+      // kosong: langsung tulis header
+      sh.getRange(1, 1, 1, cols.length).setValues([cols]).setFontWeight("bold");
+      Logger.log("setup: buat header " + name);
+      return;
+    }
+    const width = Math.max(sh.getLastColumn(), 1);
+    const values = sh.getRange(1, 1, lastRow, width).getValues();
+    const current = values[0].map((h) => String(h).trim());
+    const unchanged = JSON.stringify(current.slice(0, cols.length)) === JSON.stringify(cols) && current.every((c) => !c || cols.includes(c));
+    if (unchanged && width === cols.length) return;
+
+    // migrasi: petakan tiap baris data menurut header lama
+    const migrated = values.slice(1)
+      .filter((r) => String(r[0]).trim())
+      .map((r) =>
+        cols.map((c) => {
+          const i = current.indexOf(c);
+          return i >= 0 ? r[i] : "";
+        })
+      );
+    sh.clearContents();
+    sh.getRange(1, 1, migrated.length + 1, cols.length)
+      .setValues([cols].concat(migrated))
+      .setFontWeight("bold");
+    Logger.log("setup: migrasi " + name + " → " + migrated.length + " baris data tetap utuh");
   });
 }
 
@@ -95,7 +127,7 @@ function doPost(e) {
   try {
     const req = JSON.parse(e.postData.contents);
     const { action, sheet, id, data } = req;
-    if (action === "create") return json_(create_(sheet, data));
+    if (action === "create") return json_(create_(sheet, data, req.actor));
     if (action === "update") return json_(update_(sheet, id, data));
     if (action === "delete") return json_(delete_(sheet, id));
     if (action === "login") return json_(login_(data.username, data.password));
@@ -111,7 +143,30 @@ function toRow_(sheet, data) {
   return SCHEMA[sheet].map((c) => (data[c] !== undefined && data[c] !== null ? data[c] : ""));
 }
 
-function create_(sheet, data) {
+// semua "upload" = link Google Drive (site statis tidak bisa menerima berkas fisik)
+const DRIVE_RE = /^https?:\/\/(drive|docs)\.google\.com\//i;
+const UPLOAD_FIELDS = { atlit: ["kk", "akte", "ktp"], pelatih: ["fileLisensi"], pengurus: ["foto"] };
+
+function checkDrive_(sheet, data) {
+  (UPLOAD_FIELDS[sheet] || []).forEach((f) => {
+    const v = String(data[f] ?? "").trim();
+    if (v && !DRIVE_RE.test(v)) throw new Error(f + " harus link Google Drive (https://drive.google.com/...)");
+  });
+  if (sheet === "atlit" && Array.isArray(data.prestasi)) {
+    data.prestasi.forEach((p, i) => {
+      const v = String((p && p.piagam) ?? "").trim();
+      if (v && !DRIVE_RE.test(v)) throw new Error("prestasi ke-" + (i + 1) + ": piagam harus link Google Drive");
+    });
+  }
+}
+
+// sheet yang mencatat pembuatnya (RBAC: operator hanya melihat data buatannya sendiri)
+const OWNERED = ['atlit', 'pelatih', 'jadwal_latihan', 'klub/dojang/perguruan'];
+
+function create_(sheet, data, actor) {
+  checkDrive_(sheet, data);
+  // ponytail: actor dikirim client jadi bisa dipalsukan; enforcement server butuh token auth beneran
+  if (OWNERED.includes(sheet) && actor) data.createdBy = String(actor);
   const id = Utilities.getUuid();
   const prestasi = sheet === "atlit" ? data.prestasi || [] : null;
   if (sheet === "users") {
@@ -138,6 +193,8 @@ function findRow_(sheet, id) {
 }
 
 function update_(sheet, id, data) {
+  checkDrive_(sheet, data);
+  delete data.createdBy; // pembuat tidak boleh berubah saat edit
   const r = findRow_(sheet, id);
   const old = Object.fromEntries(
     SCHEMA[sheet].map((c, i) => [c, sheet_(sheet).getRange(r, i + 1).getValue()])
@@ -176,7 +233,7 @@ function syncPrestasi_(atlitId, list) {
 function login_(username, password) {
   const user = rows_("users").find((u) => String(u.username).toLowerCase() === String(username).toLowerCase());
   if (!user || user.passwordHash !== hash_(password)) {
-    return { ok: false, error: "Email atau password salah" };
+    return { ok: false, error: "Username atau password salah" };
   }
   delete user.passwordHash;
   return { ok: true, user };
