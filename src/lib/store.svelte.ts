@@ -2,11 +2,11 @@ export type Row = Record<string, any>;
 export type Field = { key: string; label: string; type?: string };
 export type Section = { id: string; label: string; icon: string; fields: Field[]; rows: Row[] };
 
-// 48 cabang olahraga binaan KONI Kota Probolinggo (sesuai data resmi)
+// cabang olahraga binaan KONI Kota Probolinggo (sesuai data resmi)
 export const CABOR: string[] = [
   'AKUATIK (AI)', 'ANGGAR (IKASI)', 'ANGKAT BERAT (PABERSI)', 'ANGKAT BESI (PABSI)',
   'ATLETIK (PASI)', 'BALAP SEPEDA (ISSI)', 'BERKUDA (PORDASI)', 'BERMOTOR (IMI)',
-  'BILIARD (POBSI)', 'BINARAGA (PBFI)', 'BOLA BASKET 3X3 (PERBASI)', 'BOLA TANGAN (ABTI)',
+  'BILIARD (POBSI)', 'BINARAGA (PBFI)', 'BOLA TANGAN (ABTI)',
   'BOLA VOLI (PBVSI)', 'BRIDGE (GABSI)', 'BULU TANGKIS (PBSI)', 'CATUR (PERCASI)',
   'DANCESPORT (IODI)', 'DAYUNG (PODSI)', 'DOMINO (ORADO)', 'DRUMBAND (PDBI)',
   'FUTSAL (AFI)', 'HAPKIDO (HI)', 'KARATE (FORKI)', 'KURASH (FERKUSHI)',

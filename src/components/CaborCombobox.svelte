@@ -3,7 +3,7 @@
 	import { slide } from 'svelte/transition';
 	import { CABOR } from '../lib/store.svelte';
 
-	// combobox: dropdown dengan pencarian di dalam panel (dipakai untuk memilih dari 48 cabor)
+	// combobox: dropdown dengan pencarian di dalam panel (sumber: daftar resmi CABOR)
 	let {
 		value = $bindable(''),
 	}: {

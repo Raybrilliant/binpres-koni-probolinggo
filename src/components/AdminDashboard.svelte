@@ -200,7 +200,7 @@
       <div class="deco absolute -bottom-24 -right-16 h-80 w-80 rounded-full bg-blue-400/20"></div>
       <div class="deco absolute right-12 top-16 h-20 w-20 rounded-3xl bg-white/10 rotate-12"></div>
       <div class="relative z-10 text-white">
-        <div class="logo-badge mb-6 grid h-16 w-16 place-items-center rounded-2xl bg-white text-2xl font-bold text-blue-600 shadow-xl">BK</div>
+        <div class="logo-badge mb-6 h-16 w-16"><img src="/logo.png" alt="Logo BINPRES KONI" class="h-full w-full object-contain" /></div>
         <h1 class="text-4xl font-extrabold leading-tight">BINPRES KONI<br />Kota Probolinggo</h1>
         <p class="mt-4 max-w-sm text-sm leading-relaxed text-blue-100">Panel admin Bina Prestasi — kelola data atlit, pelatih, jadwal latihan, dan klub/dojo dari satu tempat.</p>
         <div class="mt-8 flex gap-3">
@@ -214,7 +214,7 @@
     <!-- Panel kanan: form -->
     <div class="grid place-items-center bg-white p-6">
       <form onsubmit={doLogin} class="form-card w-full max-w-sm">
-        <div class="logo-badge mb-4 grid h-14 w-14 place-items-center rounded-2xl bg-blue-600 text-xl font-bold text-white shadow-lg lg:hidden">BK</div>
+        <div class="logo-badge mb-4 h-14 w-14 lg:hidden"><img src="/logo.png" alt="Logo BINPRES KONI" class="h-full w-full object-contain" /></div>
         <h1 class="mb-1 text-2xl font-bold">Selamat Datang 👋</h1>
         <p class="mb-8 text-sm text-gray-400">Masuk untuk mengelola data BINPRES</p>
         <label class="form-field mb-4 block text-sm"><span class="mb-1 block font-medium text-gray-600">Username</span>
@@ -233,7 +233,7 @@
   <!-- Sidebar -->
   <aside class="sidebar sticky top-0 flex h-screen w-64 shrink-0 flex-col bg-linear-to-b from-blue-700 via-blue-600 to-blue-800 text-white shadow-2xl">
     <div class="flex items-center gap-3 px-5 py-6">
-      <div class="logo-badge grid h-11 w-11 place-items-center rounded-xl bg-white text-lg font-bold text-blue-600 shadow-lg">BK</div>
+      <div class="logo-badge h-11 w-11 shrink-0"><img src="/logo.png" alt="Logo BINPRES KONI" class="h-full w-full object-contain" /></div>
       <div>
         <p class="text-sm font-semibold leading-tight">BINPRES KONI</p>
         <p class="text-[11px] text-blue-100">Kota Probolinggo</p>

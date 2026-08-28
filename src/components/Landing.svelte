@@ -26,15 +26,59 @@
     return m ? `https://drive.google.com/thumbnail?id=${m[1] || m[2]}&sz=w800` : u;
   }
 
-  // pengurus live dari spreadsheet
-  const cards = $derived(
-    (db.sections.find((s) => s.id === 'pengurus')?.rows ?? []).map((p, i) => ({
+  // struktur bidang binpres (default saat sheet pengurus masih kosong)
+  const struktur = [
+    {
+      nama: 'JUSDI M',
+      jabatan: 'Koordinator Bidang Binpres',
+      bio: 'Sarjana Kepelatihan Olahraga yang menjabat sebagai Koordinator Bidang Pembinaan Prestasi (Binpres) KONI Kota Probolinggo periode 2021–2025 dan berlanjut pada periode 2025–2029. Aktif sebagai Head Coach Cabor Petanque sejak tahun 2016.',
+      foto: '/struktur/JUSDI%20M.jpeg',
+    },
+    {
+      nama: 'AGUS SALIM',
+      jabatan: 'Anggota Bidang Binpres',
+      bio: 'Anggota Bidang Pembinaan Prestasi KONI Kota Probolinggo periode 2025–2029. Menjabat sebagai Ketua Cabor Aquatik sejak tahun 2018.',
+      foto: '/struktur/AGUS%20SALIM.jpeg',
+    },
+    {
+      nama: 'AGUS TRI WAHYUDI',
+      jabatan: 'Anggota Bidang Binpres',
+      bio: 'Anggota Bidang Pembinaan Prestasi KONI Kota Probolinggo periode 2025–2029. Menjabat sebagai Ketua Cabor Catur periode 2023–2027.',
+      foto: '/struktur/Ns.%20AGUS%20TRI%20WAHYUDI.jpeg',
+    },
+    {
+      nama: 'NUR CHOLIQ',
+      jabatan: 'Anggota Bidang Binpres',
+      bio: 'Anggota Bidang Pembinaan Prestasi KONI Kota Probolinggo periode 2025–2029. Menjabat sebagai Ketua Cabor Angkat Berat periode 2024–2028.',
+      foto: '/struktur/NUR%20CHOLIQ.jpeg',
+    },
+    {
+      nama: 'AMAK FADHOL',
+      jabatan: 'Anggota Bidang Binpres',
+      bio: 'Anggota Bidang Pembinaan Prestasi KONI Kota Probolinggo periode 2025–2029. Menjabat sebagai Ketua sekaligus Head Coach Cabor Wushu sejak tahun 2018.',
+      foto: '/struktur/AMAK%20FADHOL.jpeg',
+    },
+  ];
+
+  // pengurus live dari spreadsheet; fallback ke struktur bawaan saat sheet kosong
+  const cards = $derived.by(() => {
+    const rows = db.sections.find((s) => s.id === 'pengurus')?.rows ?? [];
+    if (rows.length === 0) return struktur;
+    return rows.map((p, i) => ({
       nama: String(p.nama ?? ''),
       jabatan: String(p.jabatan ?? ''),
       bio: String(p.bio ?? ''),
       foto: p.foto ? driveImg(String(p.foto)) : photos[i % photos.length],
-    }))
-  );
+    }));
+  });
+
+  // narasi bidang pembinaan prestasi (4 fokus utama)
+  const narasi = [
+    { img: '/vector/1.webp', title: 'Penguatan Prestasi Atlit', desc: 'Membangun kebanggaan publik melalui pencapaian prestasi atlet di kancah provinsi, nasional, hingga internasional.' },
+    { img: '/vector/2.webp', title: 'Pembinaan yang Terencana', desc: 'Menyusun program pelatihan jangka panjang, pemusatan latihan (Puslatcab/Puslatkot), serta evaluasi secara berkala.' },
+    { img: '/vector/3.webp', title: 'Penerapan Sport Intelligence', desc: 'Menggunakan basis data atlet, peta potensi daerah, dan analisis kekuatan lawan untuk kebijakan yang presisi.' },
+    { img: '/vector/4.webp', title: 'Sinergi Cabang Olahraga', desc: 'Menyatukan langkah antara KONI, Pemerintah Daerah, dan Induk Cabang Olahraga (Cabor) dalam pembinaan atlet.' },
+  ];
 
   // angka naik dari nilai yang sedang tampil ke nilai baru (aman dipanggil berulang)
   const shown = new WeakMap<HTMLElement, number>();
@@ -102,6 +146,19 @@
         gsap.to(card, { y: cfg.y, duration: cfg.duration, delay: cfg.delay, ease: 'sine.inOut', yoyo: true, repeat: -1 });
       });
 
+      // vector olahraga: melayang naik-turun dengan ritme & arah bervariasi
+      document.querySelectorAll<HTMLElement>('.hero-vector').forEach((v, i) => {
+        gsap.to(v, {
+          y: i % 2 ? 16 : -14,
+          rotation: i % 2 ? 6 : -6,
+          duration: 3.5 + i * 0.6,
+          delay: i * 0.5,
+          ease: 'sine.inOut',
+          yoyo: true,
+          repeat: -1,
+        });
+      });
+
       // tilt setup (quickTo = smooth mengikuti mouse, terasa "ditekan")
       document.querySelectorAll<HTMLElement>('.stat-card').forEach((card) => {
         const id = card.dataset.tilt!;
@@ -109,15 +166,25 @@
         yTo[id] = gsap.quickTo(card, 'rotationZ', { duration: 0.4, ease: 'power3.out' });
       });
 
-      // pengurus cards stagger saat masuk viewport
-      document.querySelectorAll<HTMLElement>('.pengurus-card').forEach((card, i) => {
+      // kartu narasi: entrance power-up saat masuk viewport (tanpa delay, serentak)
+      document.querySelectorAll<HTMLElement>('.narasi-card').forEach((card) => {
         gsap.from(card, {
-          y: 50,
+          y: 90,
           autoAlpha: 0,
-          duration: 0.6,
-          delay: (i % 4) * 0.08,
+          duration: 0.9,
           ease: 'power3.out',
-          scrollTrigger: { trigger: card, start: 'top 90%', once: true },
+          scrollTrigger: { trigger: card, start: 'top 95%', once: true },
+        });
+      });
+
+      // pengurus cards stagger saat masuk viewport (power-up, tanpa delay)
+      document.querySelectorAll<HTMLElement>('.pengurus-card').forEach((card) => {
+        gsap.from(card, {
+          y: 90,
+          autoAlpha: 0,
+          duration: 0.9,
+          ease: 'power3.out',
+          scrollTrigger: { trigger: card, start: 'top 95%', once: true },
         });
       });
 
@@ -162,9 +229,15 @@
     <div class="ornament absolute right-1/3 -top-32 h-96 w-96 rounded-full bg-blue-400/20"></div>
     <div class="ornament absolute -bottom-24 -right-10 h-80 w-80 rounded-3xl bg-white/5 rotate-12"></div>
 
+    <!-- vector olahraga melayang (di belakang konten, tidak interaktif) -->
+    <img src="/vector/1.webp" alt="" aria-hidden="true" loading="lazy" class="hero-vector pointer-events-none absolute left-[3%] top-[14%] z-0 hidden h-28 w-28 rounded-2xl bg-white/20 object-contain p-2 ring-1 ring-white/30 md:block" />
+    <img src="/vector/2.webp" alt="" aria-hidden="true" loading="lazy" class="hero-vector pointer-events-none absolute right-[3%] top-[8%] z-0 hidden h-32 w-32 rounded-2xl bg-white/20 object-contain p-2 ring-1 ring-white/30 md:block" />
+    <img src="/vector/3.webp" alt="" aria-hidden="true" loading="lazy" class="hero-vector pointer-events-none absolute bottom-[10%] left-[7%] z-0 hidden h-24 w-24 rounded-2xl bg-white/20 object-contain p-2 ring-1 ring-white/30 md:block" />
+    <img src="/vector/4.webp" alt="" aria-hidden="true" loading="lazy" class="hero-vector pointer-events-none absolute bottom-[5%] right-[34%] z-0 hidden h-28 w-28 rounded-2xl bg-white/20 object-contain p-2 ring-1 ring-white/30 md:block" />
+
     <div class="relative mx-auto grid max-w-6xl items-center gap-10 px-6 py-20 lg:grid-cols-2 lg:py-28">
       <div style="perspective: 1000px">
-        <span class="hero-badge inline-block rounded-full bg-white/15 px-4 py-1.5 text-xs font-semibold backdrop-blur">KONI Kota Probolinggo</span>
+        <span class="hero-badge inline-flex items-center gap-2 rounded-full bg-white/15 px-4 py-1.5 text-xs font-semibold backdrop-blur"><img src="/logo.png" alt="" class="h-5 w-5 object-contain" />KONI Kota Probolinggo</span>
         <h1 class="hero-title mt-5 text-4xl font-extrabold leading-tight lg:text-5xl">
           {#each ['Bina', 'Prestasi,', 'Wujudkan', 'Juara', 'Muda'] as w, i (i)}<span class="word inline-block">{w}&nbsp;</span>{/each}
         </h1>
@@ -217,6 +290,44 @@
     </div>
   </section>
 
+  <!-- ==== NARASI BINPRES ==== -->
+  <section id="narasi" class="relative overflow-hidden bg-linear-to-b from-blue-50/60 to-white py-20">
+    <!-- ornamen background -->
+    <div class="ornament absolute -left-16 top-24 h-56 w-56 rounded-full bg-blue-100/70"></div>
+    <div class="ornament absolute right-8 top-10 h-20 w-20 rotate-12 rounded-3xl bg-blue-100"></div>
+    <div class="ornament absolute bottom-16 left-1/4 h-14 w-14 rounded-full border-2 border-dashed border-blue-200"></div>
+    <div class="ornament absolute bottom-24 right-1/4 h-28 w-28 rounded-3xl bg-blue-50"></div>
+
+    <div class="relative mx-auto max-w-6xl px-6">
+      <div class="mb-12 text-center">
+        <span class="text-xs font-bold uppercase tracking-[0.25em] text-blue-600">Strategi</span>
+        <h2 class="mt-2 text-3xl font-extrabold">Bidang Pembinaan Prestasi <span class="text-blue-600">(BINPRES)</span></h2>
+        <p class="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-gray-500">
+          Kerangka komunikasi dan strategi pengelolaan yang fokus pada peningkatan kemampuan atlet secara terarah,
+          berbasis data, dan berkesinambungan untuk Kota Probolinggo.
+        </p>
+      </div>
+
+      <div class="grid gap-5 sm:grid-cols-2">
+        {#each narasi as n, i (i)}
+          <div class="narasi-card group flex gap-5 rounded-3xl bg-white p-5 shadow-lg shadow-blue-100/50 ring-1 ring-blue-100 transition-shadow hover:shadow-xl">
+            <img
+              src={n.img}
+              alt={n.title}
+              class="h-24 w-24 shrink-0 self-center rounded-2xl bg-blue-50 object-contain p-2 transition-transform duration-300 group-hover:scale-110"
+              loading="lazy"
+            />
+            <div>
+              <span class="text-[11px] font-extrabold uppercase tracking-widest text-blue-300">Fokus 0{i + 1}</span>
+              <h3 class="text-base font-bold leading-snug">{n.title}</h3>
+              <p class="mt-1.5 text-[13px] leading-relaxed text-gray-500">{n.desc}</p>
+            </div>
+          </div>
+        {/each}
+      </div>
+    </div>
+  </section>
+
   <!-- ==== PENGURUS ==== -->
   <section id="pengurus" class="relative overflow-hidden py-20">
     <!-- ornamen background -->
@@ -246,7 +357,7 @@
           <button
             class="pengurus-card group relative h-105 shrink-0 overflow-hidden rounded-3xl bg-blue-600 text-left text-white shadow-xl ring-1 ring-blue-200 transition-all duration-500 ease-out {expanded === i ? 'lg:grow-[3.5] lg:basis-0' : 'lg:grow lg:basis-0 hover:-translate-y-1'}"
             onclick={() => (expanded = expanded === i ? -1 : i)}>
-            <img src={p.foto} alt={p.nama} class="absolute inset-x-0 top-0 h-72 w-full object-cover transition-transform duration-500 group-hover:scale-105" loading="lazy" />
+            <img src={p.foto} alt={p.nama} class="absolute inset-x-0 top-0 h-72 w-full object-cover object-top transition-transform duration-500 group-hover:scale-105" loading="lazy" />
               <div class="absolute inset-x-0 bottom-0 p-5">
               <p class="text-base font-bold">{p.nama}</p>
               <p class="mt-0.5 text-xs font-medium text-blue-100">{p.jabatan}</p>
@@ -277,7 +388,7 @@
     <div class="relative mx-auto grid max-w-6xl gap-10 px-6 py-14 sm:grid-cols-2 lg:grid-cols-4">
       <div>
         <div class="flex items-center gap-3">
-          <div class="grid h-11 w-11 place-items-center rounded-xl bg-white text-lg font-bold text-blue-600 shadow-lg">BK</div>
+          <div class="h-11 w-11 shrink-0"><img src="/logo.png" alt="Logo BINPRES KONI" class="h-full w-full object-contain" /></div>
           <div>
             <p class="text-sm font-bold leading-tight">BINPRES KONI</p>
             <p class="text-[11px] text-blue-100">Kota Probolinggo</p>
@@ -292,6 +403,7 @@
         <p class="mb-4 text-xs font-bold uppercase tracking-widest text-blue-200">Navigasi</p>
         <ul class="flex flex-col gap-2.5 text-xs text-blue-100">
           <li><a href="/" class="transition hover:text-white hover:underline">Beranda</a></li>
+          <li><a href="#narasi" class="transition hover:text-white hover:underline">Narasi Binpres</a></li>
           <li><a href="#pengurus" class="transition hover:text-white hover:underline">Pengurus</a></li>
           <li><a href="/admin" class="transition hover:text-white hover:underline">Panel Admin</a></li>
         </ul>
