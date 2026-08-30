@@ -422,8 +422,7 @@
         <p class="mb-4 text-xs font-bold uppercase tracking-widest text-blue-200">Kontak</p>
         <ul class="flex flex-col gap-2.5 text-xs text-blue-100">
           <li>📍 Jl. Slamet Riyadi No. 143, Kel. Kanigaran, Kec. Kanigaran, Kota Probolinggo</li>
-          <li>📞 0852-3306-2968</li>
-          <li>✉️ info@koniprobolinggo.go.id</li>
+          <li>📞<a href="https://wa.me/6285233062968" target="_blank" rel="noopener" class="transition hover:text-white hover:underline">0852-3306-2968 (WhatsApp)</a></li>
         </ul>
       </div>
     </div>
