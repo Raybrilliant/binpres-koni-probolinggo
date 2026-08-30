@@ -1,25 +1,10 @@
 ---
 import Landing from "../components/Landing.svelte";
 import "../styles/global.css";
-import { searchPhotos, fallbackPhoto } from "../lib/pexels";
 
-const hero = await searchPhotos(
-    "sports training stadium athlete",
-    1,
-    "landscape",
-);
-const portraits = await searchPhotos(
-    "professional portrait person indonesia",
-    6,
-    "portrait",
-);
-
-// fallback foto saat row dari database belum punya URL foto
-const photos = portraits.map(
-    (p, i) => p?.src || fallbackPhoto(`pengurus-${i + 1}`, 600, 800),
-);
-
-const heroImage = hero[0]?.src || fallbackPhoto("binpres-hero", 1200, 900);
+// foto statis lokal (unduhan Pexels) — isi identik di development & production
+const heroImage = "/pexels/hero.jpg";
+const photos = [1, 2, 3, 4, 5, 6].map((i) => `/pexels/pengurus-${i}.jpg`);
 ---
 
 <html lang="id">

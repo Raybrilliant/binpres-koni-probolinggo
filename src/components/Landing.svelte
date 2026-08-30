@@ -421,8 +421,8 @@
       <div>
         <p class="mb-4 text-xs font-bold uppercase tracking-widest text-blue-200">Kontak</p>
         <ul class="flex flex-col gap-2.5 text-xs text-blue-100">
-          <li>📍 Jl. Mayangan, Kota Probolinggo, Jawa Timur</li>
-          <li>📞 (0335) 000000</li>
+          <li>📍 Jl. Slamet Riyadi No. 143, Kel. Kanigaran, Kec. Kanigaran, Kota Probolinggo</li>
+          <li>📞 0852-3306-2968</li>
           <li>✉️ info@koniprobolinggo.go.id</li>
         </ul>
       </div>

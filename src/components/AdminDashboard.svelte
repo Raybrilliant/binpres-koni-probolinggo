@@ -89,6 +89,13 @@
   const maxP = $derived(Math.max(1, ...pelatihPerCabor.map((x) => x.count)));
   const maxK = $derived(Math.max(1, ...klubPerCabor.map((x) => x.count)));
 
+  // atlit proyeksi Porprov X: hanya baris dengan proyeksiPorprov = 'Ya'
+  const atlitProyeksi = $derived(
+    perCabor(allRows.atlit.filter((r) => String(r.proyeksiPorprov ?? '').trim().toLowerCase() === 'ya')).filter((x) => x.count > 0)
+  );
+  const maxProj = $derived(Math.max(1, ...atlitProyeksi.map((x) => x.count)));
+  const totalProyeksi = $derived(atlitProyeksi.reduce((s, x) => s + x.count, 0));
+
   const TINGKAT_PRESTASI = ['Internasional', 'Nasional', 'Provinsi'];
   const tingkatIcon: Record<string, string> = { Internasional: '🌍', Nasional: '🇮🇩', Provinsi: '🏙️' };
   const prestasiTingkat = $derived.by(() => {
@@ -153,6 +160,7 @@
     tingkat: 'Tingkat Prestasi', lisensi: 'Lisensi Pelatih', fileLisensi: 'File Lisensi',
     tempat: 'Tempat Latihan', hari: 'Hari Latihan', jam: 'Jam Latihan',
     cabang: 'Cabang Olahraga', username: 'Username', cabor: 'Cabang Olahraga',
+    proyeksiPorprov: 'Atlit Proyeksi Porprov X',
     role: 'Role', jabatan: 'Jabatan', bio: 'Biodata', foto: 'Foto',
   };
   const DETAIL_SKIP = new Set(['id', 'atlitId', 'passwordHash', 'prestasi']);
@@ -291,7 +299,7 @@
     {#if view === 'dashboard' && isAdmin}
       <div class="content-card mb-6 overflow-hidden rounded-2xl bg-linear-to-r from-blue-600 to-blue-500 p-6 text-white shadow-xl">
         <p class="text-xl font-bold">Selamat Datang, Admin BINPRES 👋</p>
-        <p class="mt-1 text-sm text-blue-100">Panel admin Bina Prestasi KONI Kota Probolinggo — kelola data atlit, pelatih, jadwal latihan, dan klub.</p>
+        <p class="mt-1 text-sm text-blue-100">Panel Admin Bidang Pembinaan Prestasi KONI Kota Kota Probolinggo — kelola data atlit, pelatih, jadwal latihan, dan klub.</p>
       </div>
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {#each sections as s (s.id)}
@@ -348,7 +356,8 @@
         {@render caborPanel('🏟️', 'Klub/Dojang / Cabor', klubPerCabor, maxK, `${allRows.klub.length} klub/dojang`)}
       </div>
 
-      <div class="content-card mt-4 rounded-2xl bg-white p-5 shadow-lg ring-1 ring-gray-100">
+      <div class="mt-4 grid gap-4 xl:grid-cols-2">
+        <div class="content-card rounded-2xl bg-white p-5 shadow-lg ring-1 ring-gray-100">
         <p class="mb-4 flex items-center gap-2 font-bold">🏅 Prestasi Berdasarkan Tingkat</p>
         {#if !ui.loaded}
           <div class="grid gap-3 sm:grid-cols-3">
@@ -365,6 +374,9 @@
           </div>
           <p class="mt-3 text-right text-[11px] text-gray-400">Total prestasi tercatat: {prestasiTingkat.total}</p>
         {/if}
+        </div>
+
+        {@render caborPanel('⭐', 'Atlit Proyeksi Porprov X', atlitProyeksi, maxProj, `${totalProyeksi} atlit`)}
       </div>
     {:else if active}
       <div class="mb-5 flex flex-wrap items-center justify-between gap-3">

@@ -16,13 +16,13 @@
   const TINGKAT = ['Provinsi', 'Nasional', 'Internasional'];
 
   let atlit = $state({
-    nama: '', tempatLahir: '', tanggalLahir: '', jenisKelamin: 'Laki-laki', alamat: '', cabor: '',
+    nama: '', tempatLahir: '', tanggalLahir: '', jenisKelamin: 'Laki-laki', alamat: '', cabor: '', proyeksiPorprov: 'Tidak',
   });
   let prestasi = $state([{ nama: '', tahun: '2026', tingkat: 'Provinsi', piagam: '' }]);
   let files = $state<{ kk: string; akte: string; ktp: string }>({ kk: '', akte: '', ktp: '' });
 
   let pelatih = $state({ nama: '', alamat: '', jenisKelamin: 'Laki-laki', lisensi: '', fileLisensi: '', cabor: '' });
-  let jadwal = $state({ tempat: '', hari: 'Senin', jam: '' });
+  let jadwal = $state({ tempat: '', hariMulai: 'Senin', hariSelesai: 'Senin', jamMulai: '', jamSelesai: '' });
   let pengurus = $state({ nama: '', jabatan: '', bio: '', foto: '' });
   let generic: Row = $state({ cabor: 'Semua', role: 'Operator', username: '' });
   let busy = $state(false);
@@ -67,9 +67,18 @@
       if (opCabor) o.cabor = opCabor;
       return o;
     }
-    if (section === 'jadwal') return { ...jadwal };
+    if (section === 'jadwal') {
+      // kolom sheet tetap 'hari' & 'jam', diisi gabungan rentang: "Senin - Sabtu", "16:00 - 18:00"
+      const hari = jadwal.hariSelesai && jadwal.hariSelesai !== jadwal.hariMulai ? `${jadwal.hariMulai} - ${jadwal.hariSelesai}` : jadwal.hariMulai;
+      const jam = jadwal.jamSelesai ? `${jadwal.jamMulai} - ${jadwal.jamSelesai}` : jadwal.jamMulai;
+      return { tempat: jadwal.tempat, hari, jam };
+    }
     if (section === 'pengurus') return { ...pengurus };
-    return { ...generic };
+    if (section === 'users') return { ...generic };
+    // section generik (klub/dll): hanya kirim field milik section ini
+    const o: Row = {};
+    active?.fields.forEach((f) => (o[f.key] = generic[f.key] ?? ''));
+    return o;
   }
 
   function findRow(): Row | null {
@@ -92,6 +101,7 @@
         tanggalLahir: String(row.tanggalLahir ?? '').slice(0, 10),
         jenisKelamin: row.jenisKelamin ?? 'Laki-laki', alamat: row.alamat ?? '',
         cabor: String(row.cabor ?? ''),
+        proyeksiPorprov: String(row.proyeksiPorprov ?? '') || 'Tidak',
       });
       prestasi.length = 0;
       const list = row.prestasi?.length ? row.prestasi : [{ nama: '', tahun: '2026', tingkat: 'Provinsi', piagam: '' }];
@@ -107,7 +117,9 @@
     } else if (section === 'pelatih') {
       Object.assign(pelatih, { nama: row.nama ?? '', alamat: row.alamat ?? '', jenisKelamin: row.jenisKelamin ?? 'Laki-laki', lisensi: row.lisensi ?? '', fileLisensi: row.fileLisensi ?? '', cabor: String(row.cabor ?? '') });
     } else if (section === 'jadwal') {
-      Object.assign(jadwal, { tempat: row.tempat ?? '', hari: row.hari ?? 'Senin', jam: String(row.jam ?? '') });
+      const [hariMulai = 'Senin', hariSelesai = ''] = String(row.hari ?? 'Senin').split(' - ');
+      const [jamMulai = '', jamSelesai = ''] = String(row.jam ?? '').split(' - ');
+      Object.assign(jadwal, { tempat: row.tempat ?? '', hariMulai, hariSelesai: hariSelesai || hariMulai, jamMulai, jamSelesai });
     } else if (section === 'pengurus') {
       Object.assign(pengurus, { nama: row.nama ?? '', jabatan: row.jabatan ?? '', bio: row.bio ?? '', foto: row.foto ?? '' });
     } else {
@@ -162,12 +174,16 @@
           <select bind:value={atlit.jenisKelamin} class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
             <option>Laki-laki</option><option>Perempuan</option>
           </select></label>
+        <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">Atlit Proyeksi Porprov X</span>
+          <select bind:value={atlit.proyeksiPorprov} class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+            <option>Tidak</option><option>Ya</option>
+          </select></label>
       </div>
       <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">Cabang Olahraga *</span>
         {#if opCabor}
           <input type="text" value={opCabor} disabled class="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500 outline-none" />
         {:else}
-          <CaborCombobox bind:value={atlit.cabor} />
+          <CaborCombobox bind:value={atlit.cabor} pinned={null} allowCustom />
         {/if}</label>
       <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">Alamat *</span>
         <textarea required rows="2" bind:value={atlit.alamat} class="w-full rounded-xl border border-gray-200 px-3 py-2 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"></textarea></label>
@@ -233,7 +249,7 @@
         {#if opCabor}
           <input type="text" value={opCabor} disabled class="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500 outline-none" />
         {:else}
-          <CaborCombobox bind:value={pelatih.cabor} />
+          <CaborCombobox bind:value={pelatih.cabor} pinned={null} allowCustom />
         {/if}</label>
       <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">Lisensi Pelatih * <span class="font-normal text-gray-400">(link Google Drive)</span></span>
         <input required bind:value={pelatih.fileLisensi} type="url" placeholder="https://drive.google.com/file/d/..." title="Harus link Google Drive" pattern={DRIVE_RX}
@@ -243,12 +259,22 @@
     {:else if section === 'jadwal'}
       <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">Tempat Latihan *</span>
         <input required bind:value={jadwal.tempat} placeholder="cth: GOR Sumber Taman" class="w-full rounded-xl border border-gray-200 px-3 py-2 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>
-      <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">Hari Latihan *</span>
-        <select bind:value={jadwal.hari} class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 outline-none focus:border-blue-400">
-          {#each HARI as h (h)}<option value={h}>{h}</option>{/each}
-        </select></label>
-      <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">Jam Latihan *</span>
-        <input required type="time" bind:value={jadwal.jam} class="w-full rounded-xl border border-gray-200 px-3 py-2 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>
+      <div class="form-field grid gap-3 sm:grid-cols-2">
+        <label class="text-sm"><span class="mb-1 block font-medium text-gray-600">Hari Mulai *</span>
+          <select required bind:value={jadwal.hariMulai} class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 outline-none focus:border-blue-400">
+            {#each HARI as h (h)}<option value={h}>{h}</option>{/each}
+          </select></label>
+        <label class="text-sm"><span class="mb-1 block font-medium text-gray-600">Hari Selesai *</span>
+          <select required bind:value={jadwal.hariSelesai} class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 outline-none focus:border-blue-400">
+            {#each HARI as h (h)}<option value={h}>{h}</option>{/each}
+          </select></label>
+      </div>
+      <div class="form-field grid gap-3 sm:grid-cols-2">
+        <label class="text-sm"><span class="mb-1 block font-medium text-gray-600">Jam Mulai *</span>
+          <input required type="time" bind:value={jadwal.jamMulai} class="w-full rounded-xl border border-gray-200 px-3 py-2 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>
+        <label class="text-sm"><span class="mb-1 block font-medium text-gray-600">Jam Selesai *</span>
+          <input required type="time" bind:value={jadwal.jamSelesai} class="w-full rounded-xl border border-gray-200 px-3 py-2 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>
+      </div>
 
     {:else if section === 'pengurus'}
       <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">Nama *</span>
@@ -277,7 +303,11 @@
     {:else if active}
       {#each active.fields as f (f.key)}
         <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">{f.label} *</span>
-          <input required type={f.type ?? 'text'} bind:value={generic[f.key]} class="w-full rounded-xl border border-gray-200 px-3 py-2 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>
+          {#if f.key === 'cabang'}
+            <CaborCombobox bind:value={generic[f.key]} pinned={null} allowCustom />
+          {:else}
+            <input required type={f.type ?? 'text'} placeholder={f.ph ?? ''} bind:value={generic[f.key]} class="w-full rounded-xl border border-gray-200 px-3 py-2 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
+          {/if}</label>
       {/each}
     {:else}
       <p class="text-center text-gray-400">Section tidak ditemukan.</p>

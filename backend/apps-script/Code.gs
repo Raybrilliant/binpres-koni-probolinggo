@@ -2,7 +2,7 @@ const SPREADSHEET_ID = "1oMthq7zz9FZBQBc8IkO6FSvOhNaE6-kGDfqH4eecq-E";
 
 // Kolom tiap sheet (baris 1 spreadsheet harus persis seperti ini, urut)
 const SCHEMA = {
-  "atlit": ["id", "nama", "tempatLahir", "tanggalLahir", "jenisKelamin", "alamat", "kk", "akte", "ktp", "cabor", "createdBy"],
+  "atlit": ["id", "nama", "tempatLahir", "tanggalLahir", "jenisKelamin", "alamat", "kk", "akte", "ktp", "cabor", "createdBy", "proyeksiPorprov"],
   "prestasi": ["id", "atlitId", "nama", "tahun", "tingkat", "piagam"],
   "pelatih": ["id", "nama", "alamat", "jenisKelamin", "lisensi", "fileLisensi", "cabor", "createdBy"],
   "jadwal_latihan": ["id", "tempat", "hari", "jam", "createdBy"],

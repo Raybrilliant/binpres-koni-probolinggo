@@ -4,13 +4,17 @@
 	import { CABOR } from '../lib/store.svelte';
 
 	// combobox: dropdown dengan pencarian di dalam panel (sumber: daftar resmi CABOR)
+	// pinned: opsi teratas (null = tanpa pin); allowCustom: boleh isi manual bila tidak ada di daftar
 	let {
 		value = $bindable(''),
+		pinned = 'Semua' as string | null,
+		allowCustom = false,
 	}: {
 		value?: string;
+		pinned?: string | null;
+		allowCustom?: boolean;
 	} = $props();
 
-	const PINNED = 'Semua';
 	let open = $state(false);
 	let query = $state('');
 	let hi = $state(0);
@@ -18,17 +22,25 @@
 	let searchEl = $state<HTMLInputElement>();
 	const uid = `cb-${Math.random().toString(36).slice(2, 8)}`;
 
+	const isCustom = (c: string) =>
+		allowCustom && !!query.trim() && c === query.trim() && !CABOR.some((x) => x.toLowerCase() === c.toLowerCase());
+
 	const opts = $derived.by(() => {
-		const q = query.trim().toLowerCase();
+		const q = query.trim();
+		const lq = q.toLowerCase();
 		const base = [...CABOR];
+		const pin = pinned ? [pinned] : [];
 		if (!q) {
 			// pertahankan nilai lama yang mungkin tidak ada di daftar resmi (data legacy)
-			return [PINNED, ...(value && value !== PINNED && !base.includes(value) ? [value] : []), ...base];
+			return [...pin, ...(value && value !== pinned && !base.includes(value) ? [value] : []), ...base];
 		}
-		return [PINNED, ...base.filter((c) => c.toLowerCase().includes(q))];
+		// opsi isi manual: ketikan belum ada persis di daftar resmi
+		const custom =
+			allowCustom && !base.some((c) => c.toLowerCase() === lq) && lq !== (pinned ?? '').toLowerCase() ? [q] : [];
+		return [...pin, ...custom, ...base.filter((c) => c.toLowerCase().includes(lq))];
 	});
 
-	const label = (c: string) => (c === PINNED ? 'Semua (khusus Admin)' : c);
+	const label = (c: string) => (c === 'Semua' && pinned ? 'Semua (khusus Admin)' : c);
 
 	function pick(c: string) {
 		value = c;
@@ -122,7 +134,11 @@
 							class="w-full rounded-lg px-3 py-2 text-left text-sm transition-colors {i === hi ? 'bg-blue-50 font-semibold text-blue-700' : 'hover:bg-blue-50/50'} {c === value ? 'text-blue-700' : ''}"
 							onmouseenter={() => (hi = i)}
 							onclick={() => pick(c)}>
-							{label(c)}{#if c === value}&nbsp;✓{/if}
+							{#if isCustom(c)}
+								<span class="font-medium">➕ Gunakan “{c}” (isi manual)</span>
+							{:else}
+								{label(c)}{#if c === value}&nbsp;✓{/if}
+							{/if}
 						</button>
 					</li>
 				{:else}

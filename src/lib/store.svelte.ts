@@ -1,5 +1,5 @@
 export type Row = Record<string, any>;
-export type Field = { key: string; label: string; type?: string };
+export type Field = { key: string; label: string; type?: string; ph?: string };
 export type Section = { id: string; label: string; icon: string; fields: Field[]; rows: Row[] };
 
 // cabang olahraga binaan KONI Kota Probolinggo (sesuai data resmi)
@@ -15,7 +15,7 @@ export const CABOR: string[] = [
   'SEPAK BOLA (PSSI)', 'SEPAK TAKRAW (PSTI)', 'SEPATU RODA (PERSEROSI)', 'SKY AIR (PSAWI)',
   'TAE KWON DO (TI)', 'TARUNG DRAJAT (KODRAT)', 'TENIS (PELTI)', 'TENIS MEJA (PTMSI)',
   'TINJU (PERTINA)', 'TRIATHLON (FTI)', 'WUSHU (WI)', 'ARUNG JERAM (FAJI)',
-  'GATEBALL (PERGATSI)', 'IBCA MMA', 'KICK BOXING (KBI)', 'PARAMOTOR (FASI)',
+  'GATEBALL (PERGATSI)', 'IBCA MMA', 'PARAMOTOR (FASI)',
 ] as const;
 
 // Astro static site: hanya env ber-prefix PUBLIC_ yang sampai ke client
@@ -48,6 +48,7 @@ function seed(): Section[] {
         { key: 'tanggalLahir', label: 'Tanggal Lahir', type: 'date' },
         { key: 'jenisKelamin', label: 'Jenis Kelamin' },
         { key: 'cabor', label: 'Cabang Olahraga' },
+        { key: 'proyeksiPorprov', label: 'Proyeksi Porprov X' },
       ],
       rows: [],
     },
@@ -81,7 +82,7 @@ function seed(): Section[] {
       icon: '🏟️',
       fields: [
         { key: 'nama', label: 'Nama Klub/Dojang/Perguruan' },
-        { key: 'cabang', label: 'Cabang' },
+        { key: 'cabang', label: 'Cabang Olahraga', ph: 'cth: SEPAK BOLA (PSSI)' },
         { key: 'alamat', label: 'Alamat' },
       ],
       rows: [],
