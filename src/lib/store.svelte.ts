@@ -71,6 +71,7 @@ function seed(): Section[] {
       icon: '📅',
       fields: [
         { key: 'tempat', label: 'Tempat Latihan' },
+        { key: 'cabor', label: 'Cabang Olahraga' },
         { key: 'hari', label: 'Hari Latihan' },
         { key: 'jam', label: 'Jam Latihan' },
       ],

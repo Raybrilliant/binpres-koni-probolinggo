@@ -5,7 +5,7 @@ const SCHEMA = {
   "atlit": ["id", "nama", "tempatLahir", "tanggalLahir", "jenisKelamin", "alamat", "kk", "akte", "ktp", "cabor", "createdBy", "proyeksiPorprov"],
   "prestasi": ["id", "atlitId", "nama", "tahun", "tingkat", "piagam"],
   "pelatih": ["id", "nama", "alamat", "jenisKelamin", "lisensi", "fileLisensi", "cabor", "createdBy"],
-  "jadwal_latihan": ["id", "tempat", "hari", "jam", "createdBy"],
+  "jadwal_latihan": ["id", "tempat", "hari", "jam", "cabor", "createdBy"],
   "klub/dojang/perguruan": ["id", "nama", "cabang", "alamat", "createdBy"],
   "users": ["id", "nama", "username", "passwordHash", "cabor", "role"],
   "pengurus": ["id", "nama", "jabatan", "bio", "foto"],

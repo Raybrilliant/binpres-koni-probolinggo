@@ -22,7 +22,7 @@
   let files = $state<{ kk: string; akte: string; ktp: string }>({ kk: '', akte: '', ktp: '' });
 
   let pelatih = $state({ nama: '', alamat: '', jenisKelamin: 'Laki-laki', lisensi: '', fileLisensi: '', cabor: '' });
-  let jadwal = $state({ tempat: '', hariMulai: 'Senin', hariSelesai: 'Senin', jamMulai: '', jamSelesai: '' });
+  let jadwal = $state({ tempat: '', cabor: '', hariMulai: 'Senin', hariSelesai: 'Senin', jamMulai: '', jamSelesai: '' });
   let pengurus = $state({ nama: '', jabatan: '', bio: '', foto: '' });
   let generic: Row = $state({ cabor: 'Semua', role: 'Operator', username: '' });
   let busy = $state(false);
@@ -71,7 +71,8 @@
       // kolom sheet tetap 'hari' & 'jam', diisi gabungan rentang: "Senin - Sabtu", "16:00 - 18:00"
       const hari = jadwal.hariSelesai && jadwal.hariSelesai !== jadwal.hariMulai ? `${jadwal.hariMulai} - ${jadwal.hariSelesai}` : jadwal.hariMulai;
       const jam = jadwal.jamSelesai ? `${jadwal.jamMulai} - ${jadwal.jamSelesai}` : jadwal.jamMulai;
-      return { tempat: jadwal.tempat, hari, jam };
+      const cabor = opCabor || jadwal.cabor;
+      return { tempat: jadwal.tempat, cabor, hari, jam };
     }
     if (section === 'pengurus') return { ...pengurus };
     if (section === 'users') return { ...generic };
@@ -119,7 +120,7 @@
     } else if (section === 'jadwal') {
       const [hariMulai = 'Senin', hariSelesai = ''] = String(row.hari ?? 'Senin').split(' - ');
       const [jamMulai = '', jamSelesai = ''] = String(row.jam ?? '').split(' - ');
-      Object.assign(jadwal, { tempat: row.tempat ?? '', hariMulai, hariSelesai: hariSelesai || hariMulai, jamMulai, jamSelesai });
+      Object.assign(jadwal, { tempat: row.tempat ?? '', cabor: String(row.cabor ?? ''), hariMulai, hariSelesai: hariSelesai || hariMulai, jamMulai, jamSelesai });
     } else if (section === 'pengurus') {
       Object.assign(pengurus, { nama: row.nama ?? '', jabatan: row.jabatan ?? '', bio: row.bio ?? '', foto: row.foto ?? '' });
     } else {
@@ -259,6 +260,12 @@
     {:else if section === 'jadwal'}
       <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">Tempat Latihan *</span>
         <input required bind:value={jadwal.tempat} placeholder="cth: GOR Sumber Taman" class="w-full rounded-xl border border-gray-200 px-3 py-2 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>
+      <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">Cabang Olahraga *</span>
+        {#if opCabor}
+          <input type="text" value={opCabor} disabled class="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500 outline-none" />
+        {:else}
+          <CaborCombobox bind:value={jadwal.cabor} pinned={null} allowCustom />
+        {/if}</label>
       <div class="form-field grid gap-3 sm:grid-cols-2">
         <label class="text-sm"><span class="mb-1 block font-medium text-gray-600">Hari Mulai *</span>
           <select required bind:value={jadwal.hariMulai} class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 outline-none focus:border-blue-400">
