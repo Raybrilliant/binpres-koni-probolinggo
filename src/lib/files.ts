@@ -2,11 +2,12 @@
 import { unlink } from 'node:fs/promises';
 import { ENV } from '../env';
 
-/** Hapus berkas hasil upload (hanya path /uploads/ milik server; link Drive/eksternal diabaikan) */
+/** Hapus berkas hasil upload — dukung URL relatif (/uploads/x) maupun absolut (https://host/uploads/x); link eksternal diabaikan */
 export async function removeUploads(urls: Array<string | null | undefined>) {
   for (const u of urls) {
-    if (!u || !u.startsWith('/uploads/')) continue;
-    const name = u.slice('/uploads/'.length).split(/[?#]/)[0];
+    const path = u && u.includes('/uploads/') ? '/uploads/' + u.split('/uploads/').pop() : '';
+    if (!path || path === '/uploads/') continue;
+    const name = path.slice('/uploads/'.length).split(/[?#]/)[0];
     if (!/^[A-Za-z0-9._-]+$/.test(name) || name.includes('..')) continue;
     try {
       await unlink(`${ENV.UPLOAD_DIR}/${name}`);

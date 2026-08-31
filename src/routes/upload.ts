@@ -1,6 +1,7 @@
 import { Elysia, t } from 'elysia';
 import { unlink } from 'node:fs/promises';
 import { ENV } from '../env';
+import { removeUploads } from '../lib/files';
 import { authGuard, authPlugin } from '../plugins/auth';
 
 const MAX_BYTES = 3 * 1024 * 1024; // 3MB
@@ -59,6 +60,22 @@ export const uploadRoutes = new Elysia({ prefix: '/api' })
         tags: ['Upload'],
         description:
           'Unggah gambar (JPG/PNG/WebP) atau PDF maksimal 3MB. Balasan `{ url }` dipakai sebagai nilai field dokumen (kk/akte/ktp/piagam/lisensi/foto). Butuh login.',
+      },
+    },
+  )
+  // hapus berkas upload (dipakai tombol "Hapus" di form sebelum data disimpan)
+  .delete(
+    '/upload',
+    async function deleteUploadFile({ body }) {
+      await removeUploads([body.url]);
+      return { ok: true }; // idempotent: berkas yang sudah tak ada tetap ok
+    },
+    {
+      beforeHandle: authGuard,
+      body: t.Object({ url: t.String({ maxLength: 2048 }) }),
+      detail: {
+        tags: ['Upload'],
+        description: 'Hapus berkas hasil upload berdasarkan URL-nya. Butuh login.',
       },
     },
   );
