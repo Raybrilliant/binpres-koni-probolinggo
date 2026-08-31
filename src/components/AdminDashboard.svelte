@@ -233,6 +233,12 @@
       notify(t);
     }
     window.addEventListener('hashchange', applyHash);
+  });
+
+  // animasi entrance harus jalan SETELAH DOM branch hydrated/auth terpasang
+  // ($effect re-run saat auth.user berubah → animasi ulang untuk branch yang baru)
+  $effect(() => {
+    if (!hydrated) return;
     const mm = gsap.matchMedia();
     mm.add('(prefers-reduced-motion: no-preference)', () => {
       if (!auth.user) {
