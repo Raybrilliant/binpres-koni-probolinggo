@@ -2,14 +2,24 @@
   "name": "binpres-koni-backend",
   "version": "1.0.50",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "bun run --watch src/index.ts"
+    "dev": "bun run --watch src/index.ts",
+    "start": "bun run src/index.ts",
+    "db:push": "bun --bun drizzle-kit push",
+    "migrate:sqlite": "bun run scripts/migrate-sqlite-to-pg.ts",
+    "admin:create": "bun run scripts/create-admin.ts"
   },
   "dependencies": {
+    "@elysiajs/cors": "latest",
+    "@elysiajs/jwt": "latest",
+    "@elysiajs/swagger": "latest",
+    "drizzle-orm": "^1.0.0-rc.4",
     "elysia": "latest"
   },
   "devDependencies": {
-    "bun-types": "latest"
+    "@types/bun": "^1.4.0",
+    "bun": "^1.4.0",
+    "bun-types": "latest",
+    "drizzle-kit": "^1.0.0-rc.4"
   },
   "module": "src/index.js"
 }
