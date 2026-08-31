@@ -30,13 +30,16 @@
     busy = false;
     if (!loginError) {
       view = auth.user?.cabor === 'Semua' ? 'dashboard' : 'atlit';
-      gsap.from('.sidebar', { x: -60, autoAlpha: 0, duration: 0.5, ease: 'power3.out' });
+      // animasi sidebar hanya di desktop — di mobile sidebar dalam keadaan tertutup (drawer)
+      if (matchMedia('(min-width: 1024px)').matches)
+        gsap.from('.sidebar', { x: -60, autoAlpha: 0, duration: 0.5, ease: 'power3.out' });
     } else {
       // tunggu elemen .login-error dirender dulu, baru dianimasikan
       tick().then(() => gsap.fromTo('.login-error', { x: -10 }, { x: 0, duration: 0.4, ease: 'elastic.out(1, 0.3)' }));
     }
   }
   let openCabang = $state(true);
+  let sidebarOpen = $state(false); // drawer menu di mobile
   let search = $state('');
   let filterPeriode = $state('');
   let page = $state(1);
@@ -152,6 +155,8 @@
   }
 
   function navigate(v: string) {
+    form = null; // pindah menu selalu menutup form tambah/edit
+    sidebarOpen = false;
     setView(v);
     // simpan ke URL agar refresh/back kembali ke page yang sama
     if (location.hash.slice(1) !== v) history.replaceState(null, '', '#' + v);
@@ -299,8 +304,20 @@
   </div>
 {:else}
 <div class="flex min-h-screen bg-gray-50 font-poppins text-gray-800">
+  <!-- overlay drawer mobile -->
+  {#if sidebarOpen}
+    <button
+      type="button"
+      aria-label="Tutup menu"
+      class="fixed inset-0 z-30 cursor-default bg-blue-950/50 backdrop-blur-sm lg:hidden"
+      onclick={() => (sidebarOpen = false)}></button>
+  {/if}
+
   <!-- Sidebar -->
-  <aside class="sidebar sticky top-0 flex h-screen w-64 shrink-0 flex-col bg-linear-to-b from-blue-700 via-blue-600 to-blue-800 text-white shadow-2xl">
+  <aside
+    class="sidebar fixed inset-y-0 left-0 z-40 flex h-screen w-64 shrink-0 flex-col bg-linear-to-b from-blue-700 via-blue-600 to-blue-800 text-white shadow-2xl transition-transform duration-300 lg:sticky lg:top-0 lg:translate-x-0 {sidebarOpen
+      ? 'translate-x-0'
+      : '-translate-x-full'}">
     <div class="flex items-center gap-3 px-5 py-6">
       <div class="logo-badge h-11 w-11 shrink-0"><img src="/logo.png" alt="Logo BINPRES KONI" class="h-full w-full object-contain" /></div>
       <div>
@@ -356,7 +373,17 @@
   </aside>
 
   <!-- Main -->
-  <main class="flex-1 p-6 lg:p-8">
+  <main class="min-w-0 flex-1 p-4 lg:p-8">
+    <!-- topbar mobile -->
+    <div class="sticky top-0 z-20 mb-4 flex items-center gap-3 rounded-xl bg-white/90 px-3 py-2.5 shadow-sm ring-1 ring-gray-100 backdrop-blur lg:hidden">
+      <button
+        class="grid h-9 w-9 place-items-center rounded-lg bg-blue-600 text-lg text-white transition active:scale-95"
+        aria-label="Buka menu"
+        onclick={() => (sidebarOpen = !sidebarOpen)}>☰</button>
+      <img src="/logo.png" alt="Logo BINPRES KONI" class="h-7 w-7 object-contain" />
+      <p class="text-sm font-bold">BINPRES KONI</p>
+    </div>
+
     {#if form}
       {#key form.section + (form.id ?? '')}
         <TambahForm section={form.section} editId={form.id} onDone={() => (form = null)} />
