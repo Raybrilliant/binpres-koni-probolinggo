@@ -1,11 +1,18 @@
 <script lang="ts">
   import type { Row } from '../lib/store.svelte';
-  import { CABOR } from '../lib/store.svelte';
+  import { CABOR, PERIODE } from '../lib/store.svelte';
 
   import { onMount } from 'svelte';
-  import { fade, scale } from 'svelte/transition';
+  import { fade, fly, scale } from 'svelte/transition';
+  import { tick } from 'svelte';
   import gsap from 'gsap';
-  import { db, auth, login, logout, deleteRow, ui } from '../lib/store.svelte';
+  import { db, auth, login, logout, deleteRow, ui, notify } from '../lib/store.svelte';
+  import TambahForm from './TambahForm.svelte';
+
+  // form tambah/edit inline (tanpa reload halaman)
+  let form = $state<{ section: string; id: number | string | null } | null>(null);
+  // render UI setelah tahu status sesi — SSR merender kosong agar login tidak pernah berkedip
+  let hydrated = $state(false);
 
   const sections = db.sections;
 
@@ -25,15 +32,13 @@
       view = auth.user?.cabor === 'Semua' ? 'dashboard' : 'atlit';
       gsap.from('.sidebar', { x: -60, autoAlpha: 0, duration: 0.5, ease: 'power3.out' });
     } else {
-      gsap.fromTo('.login-error', { x: -10 }, { x: 0, duration: 0.4, ease: 'elastic.out(1, 0.3)' });
+      // tunggu elemen .login-error dirender dulu, baru dianimasikan
+      tick().then(() => gsap.fromTo('.login-error', { x: -10 }, { x: 0, duration: 0.4, ease: 'elastic.out(1, 0.3)' }));
     }
   }
-  $effect(() => {
-    const hash = location.hash.slice(1);
-    if (hash && menuSections.some((s) => s.id === hash)) view = hash;
-  });
   let openCabang = $state(true);
   let search = $state('');
+  let filterPeriode = $state('');
   let page = $state(1);
   const perPage = 5;
 
@@ -52,9 +57,12 @@
     const me = auth.user!.username;
     return active.rows.filter((r) => String(r.createdBy ?? '') === me);
   });
+  const periodeOptions = $derived(active?.id === 'medali' ? PERIODE : []);
   const filtered = $derived(
-    scopedRows.filter((r) =>
-      Object.values(r).join(' ').toLowerCase().includes(search.toLowerCase())
+    scopedRows
+      .filter((r) => (active?.id === 'medali' && filterPeriode ? String(r.periode ?? '') === filterPeriode : true))
+      .filter((r) =>
+        Object.values(r).join(' ').toLowerCase().includes(search.toLowerCase())
     )
   );
   const totalPages = $derived(Math.max(1, Math.ceil(filtered.length / perPage)));
@@ -81,6 +89,7 @@
     atlit: sections.find((s) => s.id === 'atlit')?.rows ?? [],
     pelatih: sections.find((s) => s.id === 'pelatih')?.rows ?? [],
     klub: sections.find((s) => s.id === 'klub')?.rows ?? [],
+    medali: sections.find((s) => s.id === 'medali')?.rows ?? [],
   });
   const atlitPerCabor = $derived(perCabor(allRows.atlit));
   const pelatihPerCabor = $derived(perCabor(allRows.pelatih));
@@ -88,6 +97,21 @@
   const maxA = $derived(Math.max(1, ...atlitPerCabor.map((x) => x.count)));
   const maxP = $derived(Math.max(1, ...pelatihPerCabor.map((x) => x.count)));
   const maxK = $derived(Math.max(1, ...klubPerCabor.map((x) => x.count)));
+
+  // total target vs perolehan medali (semua cabor)
+  const medaliTotal = $derived.by(() => {
+    const t = { e: 0, p: 0, b: 0 };
+    const h = { e: 0, p: 0, b: 0 };
+    for (const r of allRows.medali) {
+      t.e += Number(r.targetEmas) || 0;
+      t.p += Number(r.targetPerak) || 0;
+      t.b += Number(r.targetPerunggu) || 0;
+      h.e += Number(r.hasilEmas) || 0;
+      h.p += Number(r.hasilPerak) || 0;
+      h.b += Number(r.hasilPerunggu) || 0;
+    }
+    return { t, h };
+  });
 
   // atlit proyeksi Porprov X: hanya baris dengan proyeksiPorprov = 'Ya'
   const atlitProyeksi = $derived(
@@ -120,19 +144,34 @@
     );
   }
 
-  function navigate(v: string) {
+  function setView(v: string) {
     view = v;
     search = '';
+    filterPeriode = '';
     page = 1;
-    animateContent();
+  }
+
+  function navigate(v: string) {
+    setView(v);
+    // simpan ke URL agar refresh/back kembali ke page yang sama
+    if (location.hash.slice(1) !== v) history.replaceState(null, '', '#' + v);
+  }
+
+  // terapkan view dari URL hash (refresh / tombol back / hash manual)
+  function applyHash() {
+    const hash = location.hash.slice(1);
+    if (!hash) return;
+    if (hash === 'dashboard') {
+      if (isAdmin) setView('dashboard');
+      return;
+    }
+    if (menuSections.some((s) => s.id === hash)) setView(hash);
   }
 
   function goToEdit(i: number) {
     if (!active) return;
     const row = filtered[(page - 1) * perPage + i];
-    location.href = row.id
-      ? `/admin/${active.id}/tambah?id=${row.id}`
-      : `/admin/${active.id}/tambah?index=${(page - 1) * perPage + i}`;
+    form = { section: active.id, id: row?.id ?? null };
   }
 
   async function remove(i: number) {
@@ -161,25 +200,39 @@
     tempat: 'Tempat Latihan', hari: 'Hari Latihan', jam: 'Jam Latihan',
     cabang: 'Cabang Olahraga', username: 'Username', cabor: 'Cabang Olahraga',
     proyeksiPorprov: 'Atlit Proyeksi Porprov X',
+    periode: 'Periode',
+    targetEmas: 'Target Emas', targetPerak: 'Target Perak', targetPerunggu: 'Target Perunggu',
+    hasilEmas: 'Perolehan Emas', hasilPerak: 'Perolehan Perak', hasilPerunggu: 'Perolehan Perunggu',
+    createdAt: 'Dibuat', createdBy: 'Dibuat Oleh',
     role: 'Role', jabatan: 'Jabatan', bio: 'Biodata', foto: 'Foto',
   };
   const DETAIL_SKIP = new Set(['id', 'atlitId', 'passwordHash', 'prestasi']);
   const FILE_KEYS = new Set(['kk', 'akte', 'ktp', 'piagam', 'fileLisensi']);
 
-  const isUrl = (s: string) => /^https?:\/\//i.test(s);
-  // Drive share-link tidak bisa dipakai langsung di <img>; konversi ke endpoint thumbnail
-  function driveImg(u: string): string {
-    const m = u.match(/\/file\/d\/([\w-]+)|[?&]id=([\w-]+)/);
-    return m ? `https://drive.google.com/thumbnail?id=${m[1] || m[2]}&sz=w800` : u;
-  }
+  // URL eksternal atau berkas hasil upload (/uploads/...) → dirender sebagai link/gambar
+  const isUrl = (s: string) => /^https?:\/\//i.test(s) || s.startsWith('/uploads/');
   // potong bagian YYYY-MM-DD langsung dari string (tanpa Date) supaya tidak bergeser oleh timezone
   const BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
   function prettyDate(s: string): string {
     const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
     return m ? `${+m[3]} ${BULAN[+m[2] - 1]} ${m[1]}` : s;
   }
+  // timestamp unix (ms) → "31 Agustus 2026"
+  function prettyTimestamp(v: unknown): string {
+    const d = new Date(Number(v));
+    return Number.isNaN(d.getTime()) ? String(v ?? '') : `${d.getDate()} ${BULAN[d.getMonth()]} ${d.getFullYear()}`;
+  }
 
   onMount(() => {
+    hydrated = true;
+    applyHash();
+    // pesan sukses dari halaman tambah/edit (handoff antar dokumen)
+    const t = sessionStorage.getItem('binpres-toast');
+    if (t) {
+      sessionStorage.removeItem('binpres-toast');
+      notify(t);
+    }
+    window.addEventListener('hashchange', applyHash);
     const mm = gsap.matchMedia();
     mm.add('(prefers-reduced-motion: no-preference)', () => {
       if (!auth.user) {
@@ -200,8 +253,10 @@
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && (detail = null)} />
 
-{#if !auth.user}
-  <div class="grid min-h-screen lg:grid-cols-2">
+{#if !hydrated}
+  <div class="min-h-screen"></div>
+{:else if !auth.user}
+  <div class="login-view grid min-h-screen lg:grid-cols-2">
     <!-- Panel kiri: branding -->
     <div class="login-left relative hidden overflow-hidden bg-linear-to-br from-blue-700 via-blue-600 to-blue-900 lg:flex lg:flex-col lg:justify-center lg:p-14">
       <div class="deco absolute -left-20 -top-20 h-72 w-72 rounded-full bg-white/10"></div>
@@ -296,7 +351,11 @@
 
   <!-- Main -->
   <main class="flex-1 p-6 lg:p-8">
-    {#if view === 'dashboard' && isAdmin}
+    {#if form}
+      {#key form.section + (form.id ?? '')}
+        <TambahForm section={form.section} editId={form.id} onDone={() => (form = null)} />
+      {/key}
+    {:else if view === 'dashboard' && isAdmin}
       <div class="content-card mb-6 overflow-hidden rounded-2xl bg-linear-to-r from-blue-600 to-blue-500 p-6 text-white shadow-xl">
         <p class="text-xl font-bold">Selamat Datang, Admin BINPRES 👋</p>
         <p class="mt-1 text-sm text-blue-100">Panel Admin Bidang Pembinaan Prestasi KONI Kota Kota Probolinggo — kelola data atlit, pelatih, jadwal latihan, dan klub.</p>
@@ -356,6 +415,31 @@
         {@render caborPanel('🏟️', 'Klub/Dojang / Cabor', klubPerCabor, maxK, `${allRows.klub.length} klub/dojang`)}
       </div>
 
+      <div class="content-card mt-4 rounded-2xl bg-white p-5 shadow-lg ring-1 ring-gray-100">
+        <p class="mb-4 flex items-center gap-2 font-bold">🏅 Medali Porprov <span class="text-xs font-medium text-gray-400">(Perolehan / Target)</span></p>
+        {#if !ui.loaded}
+          <div class="grid gap-3 sm:grid-cols-3">
+            {#each Array(3) as _, i (i)}<div class="h-20 animate-pulse rounded-xl bg-gray-100"></div>{/each}
+          </div>
+        {:else}
+          <div class="grid gap-3 sm:grid-cols-3">
+            <div class="rounded-xl bg-linear-to-br from-blue-50 to-blue-100/50 p-4 ring-1 ring-blue-100">
+              <p class="text-xs font-semibold uppercase tracking-wide text-blue-600">🥇 Emas</p>
+              <p class="mt-1 text-2xl font-extrabold text-gray-800">{medaliTotal.h.e}<span class="text-sm font-semibold text-gray-400"> / {medaliTotal.t.e}</span></p>
+            </div>
+            <div class="rounded-xl bg-linear-to-br from-blue-50 to-blue-100/50 p-4 ring-1 ring-blue-100">
+              <p class="text-xs font-semibold uppercase tracking-wide text-blue-600">🥈 Perak</p>
+              <p class="mt-1 text-2xl font-extrabold text-gray-800">{medaliTotal.h.p}<span class="text-sm font-semibold text-gray-400"> / {medaliTotal.t.p}</span></p>
+            </div>
+            <div class="rounded-xl bg-linear-to-br from-blue-50 to-blue-100/50 p-4 ring-1 ring-blue-100">
+              <p class="text-xs font-semibold uppercase tracking-wide text-blue-600">🥉 Perunggu</p>
+              <p class="mt-1 text-2xl font-extrabold text-gray-800">{medaliTotal.h.b}<span class="text-sm font-semibold text-gray-400"> / {medaliTotal.t.b}</span></p>
+            </div>
+          </div>
+          <p class="mt-3 text-right text-[11px] text-gray-400">Total target: {medaliTotal.t.e + medaliTotal.t.p + medaliTotal.t.b} medali • Total perolehan: {medaliTotal.h.e + medaliTotal.h.p + medaliTotal.h.b} medali</p>
+        {/if}
+      </div>
+
       <div class="mt-4 grid gap-4 xl:grid-cols-2">
         <div class="content-card rounded-2xl bg-white p-5 shadow-lg ring-1 ring-gray-100">
         <p class="mb-4 flex items-center gap-2 font-bold">🏅 Prestasi Berdasarkan Tingkat</p>
@@ -383,20 +467,31 @@
         <h1 class="flex items-center gap-2 text-2xl font-bold">
           <span>{active.icon}</span> {active.label}
         </h1>
-        <a
-          href="/admin/{active.id}/tambah"
+        <button
+          onclick={() => (form = { section: active.id, id: null })}
           class="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-600/30 transition hover:bg-blue-700 active:scale-95">
           + Tambah {active.label}
-        </a>
+        </button>
       </div>
 
       <div class="content-card rounded-2xl bg-white p-5 shadow-lg ring-1 ring-gray-100">
-        <input
-          type="search"
-          placeholder="🔍 Cari {active.label.toLowerCase()}..."
-          bind:value={search}
-          oninput={() => (page = 1)}
-          class="mb-4 w-full max-w-sm rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100" />
+        <div class="mb-4 flex flex-wrap items-center gap-2">
+          <input
+            type="search"
+            placeholder="🔍 Cari {active.label.toLowerCase()}..."
+            bind:value={search}
+            oninput={() => (page = 1)}
+            class="w-full max-w-sm rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100" />
+          {#if active.id === 'medali' && periodeOptions.length}
+            <select
+              bind:value={filterPeriode}
+              oninput={() => (page = 1)}
+              class="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100">
+              <option value="">Semua Periode</option>
+              {#each periodeOptions as p (p)}<option value={p}>{p}</option>{/each}
+            </select>
+          {/if}
+        </div>
 
         <div class="overflow-x-auto">
           <table class="w-full text-left text-sm">
@@ -410,7 +505,7 @@
               </tr>
             </thead>
             <tbody>
-              {#if !ui.loaded}
+              {#if !ui.loaded || ui.refreshing}
                 {#each Array(5) as _, i (i)}
                   <tr class="border-b border-gray-100">
                     <td class="px-3 py-3" colspan={active.fields.length + 2}>
@@ -430,6 +525,7 @@
                   <td class="whitespace-nowrap px-3 py-3 text-right">
                     <button disabled={busy} class="rounded-lg bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-200 disabled:opacity-50" onclick={(e) => { e.stopPropagation(); detail = row; }}>👁️ Detail</button>
                     <button disabled={busy} class="ml-1 rounded-lg bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-200 disabled:opacity-50" onclick={(e) => { e.stopPropagation(); goToEdit(i); }}>✏️ Edit</button>
+                    {#if active.id === 'medali'}<button disabled={busy} class="ml-1 rounded-lg bg-blue-100 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-200 disabled:opacity-50" onclick={(e) => { e.stopPropagation(); goToEdit(i); }}>🏅 Perolehan</button>{/if}
                     <button disabled={busy} class="ml-1 rounded-lg bg-red-100 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-200 disabled:opacity-50" onclick={(e) => { e.stopPropagation(); remove(i); }}>{#if busy}⏳{:else}🗑️{/if} Hapus</button>
                   </td>
                 </tr>
@@ -487,7 +583,7 @@
                 {#if !s}
                   <span class="text-gray-300">—</span>
                 {:else if k === 'foto' || k === 'bio'}
-                  {#if isUrl(s)}<a href={s} target="_blank" rel="noopener"><img src={driveImg(s)} alt={s} class="max-h-52 w-full rounded-xl object-cover ring-1 ring-gray-200 transition hover:ring-blue-300" /></a>{:else}{s}{/if}
+                  {#if isUrl(s)}<a href={s} target="_blank" rel="noopener"><img src={s} alt={s} class="max-h-52 w-full rounded-xl object-cover ring-1 ring-gray-200 transition hover:ring-blue-300" /></a>{:else}{s}{/if}
                 {:else if FILE_KEYS.has(k)}
                   {#if isUrl(s)}
                     <a href={s} target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700 underline underline-offset-2 ring-1 ring-blue-100 hover:bg-blue-100">📎 Buka berkas</a>
@@ -496,6 +592,8 @@
                   {/if}
                 {:else if k === 'tanggalLahir'}
                   {prettyDate(s)}
+                {:else if k === 'createdAt'}
+                  {prettyTimestamp(v)}
                 {:else if isUrl(s)}
                   <a href={s} target="_blank" rel="noopener" class="font-medium text-blue-600 underline underline-offset-2 hover:text-blue-800">📎 Buka berkas</a>
                 {:else}
@@ -532,6 +630,16 @@
         {/if}
       </div>
     </div>
+
+    {#if ui.toast}
+      <div
+        class="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white shadow-2xl shadow-blue-600/30"
+        role="status"
+        in:fly={{ y: 16, duration: 200 }}
+        out:fade={{ duration: 150 }}>
+        ✅ {ui.toast}
+      </div>
+    {/if}
   {/if}
 </div>
 {/if}

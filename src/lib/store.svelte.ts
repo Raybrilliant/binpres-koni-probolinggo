@@ -2,7 +2,7 @@ export type Row = Record<string, any>;
 export type Field = { key: string; label: string; type?: string; ph?: string };
 export type Section = { id: string; label: string; icon: string; fields: Field[]; rows: Row[] };
 
-// cabang olahraga binaan KONI Kota Probolinggo (sesuai data resmi)
+// 46 cabang olahraga binaan KONI Kota Probolinggo (sesuai data resmi)
 export const CABOR: string[] = [
   'AKUATIK (AI)', 'ANGGAR (IKASI)', 'ANGKAT BERAT (PABERSI)', 'ANGKAT BESI (PABSI)',
   'ATLETIK (PASI)', 'BALAP SEPEDA (ISSI)', 'BERKUDA (PORDASI)', 'BERMOTOR (IMI)',
@@ -18,22 +18,50 @@ export const CABOR: string[] = [
   'GATEBALL (PERGATSI)', 'IBCA MMA', 'PARAMOTOR (FASI)',
 ] as const;
 
-// Astro static site: hanya env ber-prefix PUBLIC_ yang sampai ke client
-const ENDPOINT: string = (import.meta.env.PUBLIC_GAS_ENDPOINT || import.meta.env.GAS_ENDPOINT || '') as string;
+// periode PORPROV (2 tahunan) mulai 2027: 2027, 2029, 2031, ...
+export const PERIODE: string[] = Array.from({ length: 9 }, (_, i) => String(2027 + i * 2));
 
-// mapping id section frontend → nama sheet di spreadsheet
+// Astro static site: env ber-prefix PUBLIC_ yang sampai ke client.
+// Kosong = same-origin (dev: proxy Vite → :3000, produksi: reverse proxy).
+export const API: string = (import.meta.env.PUBLIC_API_URL ?? '') as string;
+
+// mapping id section frontend → nama koleksi di backend
 const SHEET: Record<string, string> = {
   atlit: 'atlit',
   pelatih: 'pelatih',
   jadwal: 'jadwal_latihan',
-  klub: 'klub/dojang/perguruan',
+  klub: 'klub',
+  medali: 'medali',
   users: 'users',
   pengurus: 'pengurus',
 };
 
-async function api(payload: any): Promise<any> {
-  const res = await fetch(ENDPOINT, { method: 'POST', redirect: 'follow', body: JSON.stringify(payload) });
+let token: string | null = null;
+if (typeof localStorage !== 'undefined') token = localStorage.getItem('binpres-token');
+
+async function api(path: string, init: RequestInit = {}): Promise<any> {
+  const isForm = init.body instanceof FormData;
+  const res = await fetch(`${API}${path}`, {
+    ...init,
+    headers: {
+      ...(init.headers as Record<string, string> | undefined),
+      ...(isForm ? {} : { 'content-type': 'application/json' }),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+  // sesi kadaluarsa/token invalid → bersihkan sesi
+  if (res.status === 401 && token) clearSession();
   return res.json();
+}
+
+function clearSession() {
+  token = null;
+  auth.user = null;
+  if (typeof localStorage !== 'undefined') {
+    localStorage.removeItem('binpres-token');
+    localStorage.removeItem('binpres-user');
+  }
+  syncLabels();
 }
 
 function seed(): Section[] {
@@ -89,6 +117,22 @@ function seed(): Section[] {
       rows: [],
     },
     {
+      id: 'medali',
+      label: 'Target & Perolehan Medali',
+      icon: '🏅',
+      fields: [
+        { key: 'cabor', label: 'Cabang Olahraga' },
+        { key: 'periode', label: 'Periode' },
+        { key: 'targetEmas', label: 'Target Emas' },
+        { key: 'targetPerak', label: 'Target Perak' },
+        { key: 'targetPerunggu', label: 'Target Perunggu' },
+        { key: 'hasilEmas', label: 'Emas' },
+        { key: 'hasilPerak', label: 'Perak' },
+        { key: 'hasilPerunggu', label: 'Perunggu' },
+      ],
+      rows: [],
+    },
+    {
       id: 'pengurus',
       label: 'Manajemen Pengurus',
       icon: '👔',
@@ -114,7 +158,7 @@ function seed(): Section[] {
 }
 
 function loadLocal(): Section[] {
-  // mode GAS: selalu mulai kosong, data diambil dari spreadsheet saat refresh()
+  // mode backend: selalu mulai kosong, data diambil dari server saat refresh()
   return seed().map((s) => ({ ...s, rows: [] }));
 }
 
@@ -123,81 +167,90 @@ export const db = $state<{ sections: Section[] }>({ sections: loadLocal() });
 // sekali jalan: hapus cache lama yang masih menyimpan data dummy versi lama
 if (typeof localStorage !== 'undefined') localStorage.removeItem('binpres-admin-db');
 
-export const ui = $state({ loaded: !ENDPOINT });
+export const ui = $state({ loaded: false, toast: '', refreshing: false });
 
-// Tarik semua data dari GAS; dipakai saat init & setelah tiap mutasi
+let toastTimer: ReturnType<typeof setTimeout> | undefined;
+export function notify(msg: string) {
+  ui.toast = msg;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (ui.toast = ''), 2500);
+}
+
+// Tarik data dari backend; dipakai saat init & setelah tiap mutasi
 let inflight: Promise<void> | null = null;
 
 export async function refresh() {
-  if (!ENDPOINT || typeof fetch === 'undefined') return;
+  if (typeof fetch === 'undefined') return;
   if (inflight) return inflight; // dedup: panggilan bersamaan share satu request
-  inflight = doRefresh().finally(() => (inflight = null));
+  ui.refreshing = true;
+  inflight = doRefresh().finally(() => {
+    inflight = null;
+    ui.refreshing = false;
+  });
   return inflight;
 }
 
 async function doRefresh() {
   try {
-    let data: Record<string, Row[]>;
-    const res = await fetch(`${ENDPOINT}?sheet=all`);
-    const j = await res.json();
+    // login → data lengkap (RBAC by token); tamu → ringkasan publik (landing)
+    const path = auth.user ? '/api/sheets/all' : '/api/public/summary';
+    const j = await api(path);
     if (j.ok) {
-      data = j.data;
-    } else {
-      // deployment lama belum dukung sheet=all: ambil per-sheet
-      data = {};
-      await Promise.all(
-        db.sections.map(async (s) => {
-          const r = await (await fetch(`${ENDPOINT}?sheet=${SHEET[s.id] ?? s.id}`)).json();
-          data[s.id] = r.ok ? r.data : [];
-        })
-      );
+      const data = j.data as Record<string, Row[]>;
+      db.sections.forEach((s) => {
+        const rows = data[SHEET[s.id] ?? s.id] ?? [];
+        s.rows = rows;
+      });
+      syncLabels();
     }
-    db.sections.forEach((s) => (s.rows = data[SHEET[s.id] ?? s.id] ?? []));
-    syncLabels();
   } catch {
     /* offline: biarkan data lokal */
   } finally {
     ui.loaded = true;
   }
 }
-if (typeof window !== 'undefined') refresh();
-
-
 
 export async function addRow(sectionId: string, row: Row) {
-  if (ENDPOINT) {
-    // tandai pembuat data utk RBAC operator (backend membuang kolom ini di sheet tanpa createdBy)
-    const r = await api({ action: 'create', sheet: SHEET[sectionId] ?? sectionId, actor: auth.user?.username, data: row });
-    if (r.ok) await refresh();
-    return r;
+  const r = await api(`/api/${SHEET[sectionId] ?? sectionId}`, { method: 'POST', body: JSON.stringify(row) });
+  if (r.ok) {
+    notify('Data berhasil ditambahkan');
+    await refresh();
   }
-  row.id = crypto.randomUUID();
-  db.sections.find((s) => s.id === sectionId)?.rows.push(row);
-  return { ok: true };
+  return r;
 }
 
 export async function updateRow(sectionId: string, id: string, data: Row) {
-  if (ENDPOINT) {
-    const r = await api({ action: 'update', sheet: SHEET[sectionId] ?? sectionId, id, data });
-    if (r.ok) await refresh();
-    return r;
+  const r = await api(`/api/${SHEET[sectionId] ?? sectionId}/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
+  if (r.ok) {
+    notify('Data berhasil diperbarui');
+    await refresh();
   }
-  const rows = db.sections.find((s) => s.id === sectionId)?.rows ?? [];
-  const i = rows.findIndex((r) => r.id === id);
-  if (i >= 0) rows[i] = { ...rows[i], ...data };
-  return { ok: true };
+  return r;
 }
 
 export async function deleteRow(sectionId: string, id: string) {
-  if (ENDPOINT) {
-    const r = await api({ action: 'delete', sheet: SHEET[sectionId] ?? sectionId, id });
-    if (r.ok) await refresh();
-    return r;
+  const r = await api(`/api/${SHEET[sectionId] ?? sectionId}/${id}`, { method: 'DELETE' });
+  if (r.ok) {
+    notify('Data berhasil dihapus');
+    await refresh();
   }
-  const s = db.sections.find((x) => x.id === sectionId);
-  const i = s?.rows.findIndex((r) => r.id === id) ?? -1;
-  if (i >= 0) s!.rows.splice(i, 1);
-  return { ok: true };
+  return r;
+}
+
+// Unggah gambar/PDF (maks 3MB di server) → { ok, url }
+export async function uploadFile(file: File): Promise<{ ok: boolean; url?: string; error?: string }> {
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const res = await fetch(`${API}/api/upload`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: fd,
+    });
+    return await res.json();
+  } catch {
+    return { ok: false, error: 'Gagal mengunggah berkas' };
+  }
 }
 
 export type User = { nama: string; username: string; cabor: string; role: string };
@@ -214,31 +267,27 @@ function loadUser(): User | null {
 export const auth = $state<{ user: User | null }>({ user: loadUser() });
 
 export async function login(username: string, password: string): Promise<string | null> {
-  if (ENDPOINT) {
-    try {
-      const r = await api({ action: 'login', data: { username, password } });
-      if (!r.ok) return r.error ?? 'Login gagal';
-      auth.user = { nama: r.user.nama, username: r.user.username, cabor: r.user.cabor, role: r.user.role };
-    } catch {
-      return 'Tidak dapat terhubung ke server';
-    }
-  } else {
-    const u = db.sections.find((s) => s.id === 'users')?.rows.find(
-      (r) => String(r.username).toLowerCase() === username.toLowerCase()
-    );
-    if (!u) return 'Username tidak ditemukan';
-    if (password.length < 6) return 'Password minimal 6 karakter';
-    auth.user = { nama: u.nama, username: u.username, cabor: u.cabor, role: u.role };
+  try {
+    const r = await api('/api/auth/login', { method: 'POST', body: JSON.stringify({ username, password }) });
+    if (!r.ok) return r.error ?? 'Login gagal';
+    if (!r.token) return 'Login gagal: token tidak diterima';
+    token = r.token;
+    auth.user = { nama: r.user.nama, username: r.user.username, cabor: r.user.cabor, role: r.user.role };
+    localStorage.setItem('binpres-token', token!);
+    localStorage.setItem('binpres-user', JSON.stringify(auth.user));
+    syncLabels();
+    await refresh(); // setelah login tarik data lengkap (sebelumnya hanya ringkasan publik)
+  } catch {
+    return 'Tidak dapat terhubung ke server';
   }
-  localStorage.setItem('binpres-user', JSON.stringify(auth.user));
-  syncLabels();
   return null;
 }
 
 export function logout() {
-  auth.user = null;
-  localStorage.removeItem('binpres-user');
-  syncLabels();
+  clearSession();
+  // CSS anti-flash bergantung pada atribut ini — hapus agar login terlihat lagi
+  if (typeof document !== 'undefined') document.documentElement.removeAttribute('data-auth');
+  refresh(); // kembali ke ringkasan publik
 }
 
 // Label section klub menyesuaikan cabor user yang login
@@ -256,3 +305,5 @@ export function syncLabels() {
     : 'Tambah ' + clubLabel(auth.user.cabor);
 }
 syncLabels();
+
+if (typeof window !== 'undefined') refresh();

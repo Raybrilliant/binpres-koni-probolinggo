@@ -20,57 +20,15 @@
   const countOf = (id: string) => db.sections.find((s) => s.id === id)?.rows.length ?? 0;
   const stats = $derived({ atlit: countOf('atlit'), pelatih: countOf('pelatih'), klub: countOf('klub') });
 
-  // Drive share-link tidak bisa dipakai langsung di <img>; konversi ke endpoint thumbnail
-  function driveImg(u: string): string {
-    const m = u.match(/\/file\/d\/([\w-]+)|[?&]id=([\w-]+)/);
-    return m ? `https://drive.google.com/thumbnail?id=${m[1] || m[2]}&sz=w800` : u;
-  }
-
-  // struktur bidang binpres (default saat sheet pengurus masih kosong)
-  const struktur = [
-    {
-      nama: 'JUSDI M',
-      jabatan: 'Koordinator Bidang Binpres',
-      bio: 'Sarjana Kepelatihan Olahraga yang menjabat sebagai Koordinator Bidang Pembinaan Prestasi (Binpres) KONI Kota Probolinggo periode 2021–2025 dan berlanjut pada periode 2025–2029. Aktif sebagai Head Coach Cabor Petanque sejak tahun 2016.',
-      foto: '/struktur/JUSDI%20M.jpeg',
-    },
-    {
-      nama: 'AGUS SALIM',
-      jabatan: 'Anggota Bidang Binpres',
-      bio: 'Anggota Bidang Pembinaan Prestasi KONI Kota Probolinggo periode 2025–2029. Menjabat sebagai Ketua Cabor Aquatik sejak tahun 2018.',
-      foto: '/struktur/AGUS%20SALIM.jpeg',
-    },
-    {
-      nama: 'AGUS TRI WAHYUDI',
-      jabatan: 'Anggota Bidang Binpres',
-      bio: 'Anggota Bidang Pembinaan Prestasi KONI Kota Probolinggo periode 2025–2029. Menjabat sebagai Ketua Cabor Catur periode 2023–2027.',
-      foto: '/struktur/Ns.%20AGUS%20TRI%20WAHYUDI.jpeg',
-    },
-    {
-      nama: 'NUR CHOLIQ',
-      jabatan: 'Anggota Bidang Binpres',
-      bio: 'Anggota Bidang Pembinaan Prestasi KONI Kota Probolinggo periode 2025–2029. Menjabat sebagai Ketua Cabor Angkat Berat periode 2024–2028.',
-      foto: '/struktur/NUR%20CHOLIQ.jpeg',
-    },
-    {
-      nama: 'AMAK FADHOL',
-      jabatan: 'Anggota Bidang Binpres',
-      bio: 'Anggota Bidang Pembinaan Prestasi KONI Kota Probolinggo periode 2025–2029. Menjabat sebagai Ketua sekaligus Head Coach Cabor Wushu sejak tahun 2018.',
-      foto: '/struktur/AMAK%20FADHOL.jpeg',
-    },
-  ];
-
-  // pengurus live dari spreadsheet; fallback ke struktur bawaan saat sheet kosong
-  const cards = $derived.by(() => {
-    const rows = db.sections.find((s) => s.id === 'pengurus')?.rows ?? [];
-    if (rows.length === 0) return struktur;
-    return rows.map((p, i) => ({
+  // pengurus live dari database (dikelola lewat panel admin)
+  const cards = $derived(
+    (db.sections.find((s) => s.id === 'pengurus')?.rows ?? []).map((p, i) => ({
       nama: String(p.nama ?? ''),
       jabatan: String(p.jabatan ?? ''),
       bio: String(p.bio ?? ''),
-      foto: p.foto ? driveImg(String(p.foto)) : photos[i % photos.length],
-    }));
-  });
+      foto: p.foto ? String(p.foto) : photos[i % photos.length],
+    }))
+  );
 
   // narasi bidang pembinaan prestasi (4 fokus utama)
   const narasi = [
@@ -212,7 +170,7 @@
     };
   });
 
-  // realtime: efek reaktif terhadap perubahan nilai ATAU status data pertama dari GAS
+  // realtime: efek reaktif terhadap perubahan nilai ATAU status data pertama dari server
   $effect(() => {
     void ui.loaded;
     const targets = [stats.atlit, stats.pelatih, stats.klub];
@@ -345,7 +303,7 @@
       </div>
 
       {#if !ui.loaded}
-        <!-- skeleton saat menunggu data GAS -->
+        <!-- skeleton saat menunggu data dari server -->
         <div class="flex flex-col gap-4 lg:flex-row">
           {#each Array(5) as _, i (i)}
             <div class="h-105 shrink-0 flex-1 animate-pulse rounded-3xl bg-blue-50"></div>

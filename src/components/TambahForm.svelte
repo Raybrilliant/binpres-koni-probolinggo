@@ -1,15 +1,23 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { db, addRow, updateRow, refresh, ui, auth, type Row } from '../lib/store.svelte';
+  import { db, addRow, updateRow, refresh, ui, auth, PERIODE, type Row } from '../lib/store.svelte';
   import CaborCombobox from './CaborCombobox.svelte';
+  import UploadField from './UploadField.svelte';
   import gsap from 'gsap';
 
-  let { section }: { section: string } = $props();
+  // dipakai inline di AdminDashboard: section + editId dari props, onDone dipanggil setelah simpan sukses
+  let {
+    section,
+    editId = null,
+    onDone = null,
+  }: {
+    section: string;
+    editId?: number | string | null;
+    onDone?: (() => void) | null;
+  } = $props();
 
-  const editId = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('id') : null;
-  const editIndex = typeof location !== 'undefined' ? new URLSearchParams(location.search).get('index') : null;
-  const isEdit = editId !== null || editIndex !== null;
-  let ready = $state(!isEdit);
+  const isEdit = $derived(editId !== null);
+  let ready = $state(false);
 
   const active = $derived(db.sections.find((s) => s.id === section));
   const YEARS = ['2026', '2025', '2024'];
@@ -23,9 +31,11 @@
 
   let pelatih = $state({ nama: '', alamat: '', jenisKelamin: 'Laki-laki', lisensi: '', fileLisensi: '', cabor: '' });
   let jadwal = $state({ tempat: '', cabor: '', hariMulai: 'Senin', hariSelesai: 'Senin', jamMulai: '', jamSelesai: '' });
+  let medali = $state({ cabor: '', periode: '', targetEmas: 0, targetPerak: 0, targetPerunggu: 0, hasilEmas: 0, hasilPerak: 0, hasilPerunggu: 0 });
   let pengurus = $state({ nama: '', jabatan: '', bio: '', foto: '' });
   let generic: Row = $state({ cabor: 'Semua', role: 'Operator', username: '' });
   let busy = $state(false);
+  let saveError = $state('');
 
   const HARI = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
 
@@ -33,25 +43,32 @@
     e.preventDefault();
     if (!active || busy) return;
     busy = true;
+    saveError = '';
     try {
-      if (editId || editIndex !== null) {
+      let r: { ok: boolean; error?: string };
+      if (isEdit) {
         const target = findRow();
         if (target?.id) {
-          await updateRow(section, target.id, collect());
+          r = await updateRow(section, target.id, collect());
         } else if (target) {
           Object.assign(target, collect());
+          r = { ok: true };
+        } else {
+          r = { ok: false, error: 'Data tidak ditemukan' };
         }
       } else {
-        await addRow(section === 'atlit' ? 'atlit' : section === 'pelatih' ? 'pelatih' : section === 'jadwal' ? 'jadwal' : section, collect());
+        r = await addRow(section === 'atlit' ? 'atlit' : section === 'pelatih' ? 'pelatih' : section === 'jadwal' ? 'jadwal' : section, collect());
       }
-      location.href = '/admin#' + section;
+      if (!r.ok) {
+        saveError = r.error ?? 'Gagal menyimpan data';
+        return;
+      }
+      // toast sudah ditampilkan store; kembali ke daftar tanpa reload halaman
+      onDone?.();
     } finally {
       busy = false;
     }
   }
-
-  // semua "upload" diisi link Google Drive; divalidasi browser (pattern) dan server (Code.gs)
-  const DRIVE_RX = 'https://(drive|docs)\\.google\\.com/.+';
 
   // operator non-admin: data yang dibuat selalu milik cabor-nya
   const opCabor = $derived(auth.user && auth.user.cabor !== 'Semua' ? auth.user.cabor : '');
@@ -74,6 +91,19 @@
       const cabor = opCabor || jadwal.cabor;
       return { tempat: jadwal.tempat, cabor, hari, jam };
     }
+    if (section === 'medali') {
+      const num = (v: unknown) => Number(v) || 0;
+      return {
+        cabor: opCabor || medali.cabor,
+        periode: medali.periode,
+        targetEmas: num(medali.targetEmas),
+        targetPerak: num(medali.targetPerak),
+        targetPerunggu: num(medali.targetPerunggu),
+        hasilEmas: num(medali.hasilEmas),
+        hasilPerak: num(medali.hasilPerak),
+        hasilPerunggu: num(medali.hasilPerunggu),
+      };
+    }
     if (section === 'pengurus') return { ...pengurus };
     if (section === 'users') return { ...generic };
     // section generik (klub/dll): hanya kirim field milik section ini
@@ -84,8 +114,7 @@
 
   function findRow(): Row | null {
     const rows = db.sections.find((x) => x.id === section)?.rows ?? [];
-    if (editId) return rows.find((r) => r.id === editId) ?? null;
-    if (editIndex !== null) return rows[Number(editIndex)] ?? null;
+    if (isEdit) return rows.find((r) => r.id === editId) ?? null;
     return null;
   }
 
@@ -121,6 +150,17 @@
       const [hariMulai = 'Senin', hariSelesai = ''] = String(row.hari ?? 'Senin').split(' - ');
       const [jamMulai = '', jamSelesai = ''] = String(row.jam ?? '').split(' - ');
       Object.assign(jadwal, { tempat: row.tempat ?? '', cabor: String(row.cabor ?? ''), hariMulai, hariSelesai: hariSelesai || hariMulai, jamMulai, jamSelesai });
+    } else if (section === 'medali') {
+      Object.assign(medali, {
+        cabor: String(row.cabor ?? ''),
+        periode: String(row.periode ?? ''),
+        targetEmas: Number(row.targetEmas) || 0,
+        targetPerak: Number(row.targetPerak) || 0,
+        targetPerunggu: Number(row.targetPerunggu) || 0,
+        hasilEmas: Number(row.hasilEmas) || 0,
+        hasilPerak: Number(row.hasilPerak) || 0,
+        hasilPerunggu: Number(row.hasilPerunggu) || 0,
+      });
     } else if (section === 'pengurus') {
       Object.assign(pengurus, { nama: row.nama ?? '', jabatan: row.jabatan ?? '', bio: row.bio ?? '', foto: row.foto ?? '' });
     } else {
@@ -145,8 +185,8 @@
 
 <div class="mx-auto max-w-3xl p-6 lg:p-8">
   <div class="mb-6 flex items-center gap-3">
-    <a href="/admin#{section}" class="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-blue-600 shadow ring-1 ring-gray-100 transition hover:bg-blue-50 active:scale-95">← Kembali</a>
-    <h1 class="text-2xl font-bold">{active?.icon ?? '📄'} {editId || editIndex !== null ? 'Edit' : 'Tambah'} {active?.label ?? 'Data'}</h1>
+    <button type="button" class="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-blue-600 shadow ring-1 ring-gray-100 transition hover:bg-blue-50 active:scale-95" onclick={() => onDone?.()}>← Kembali</button>
+    <h1 class="text-2xl font-bold">{active?.icon ?? '📄'} {isEdit ? 'Edit' : 'Tambah'} {active?.label ?? 'Data'}</h1>
   </div>
 
   {#if isEdit && !ready}
@@ -203,11 +243,8 @@
               <select bind:value={p.tingkat} class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 outline-none focus:border-blue-400">
                 {#each TINGKAT as t (t)}<option value={t}>{t}</option>{/each}
               </select></label>
-            <label class="text-sm sm:col-span-3"><span class="mb-1 block font-medium text-gray-600">Piagam * <span class="font-normal text-gray-400">(link Google Drive)</span></span>
-              <input required bind:value={p.piagam} type="url" placeholder="https://drive.google.com/file/d/..." title="Harus link Google Drive"
-                pattern={DRIVE_RX}
-                class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
-              {#if p.piagam}<a href={p.piagam} target="_blank" rel="noopener" class="mt-1 inline-block truncate text-xs font-medium text-blue-600 hover:text-blue-800">📎 Cek link</a>{/if}</label>
+            <label class="text-sm sm:col-span-3"><span class="mb-1 block font-medium text-gray-600">Piagam * <span class="font-normal text-gray-400">(gambar/PDF, maks 3MB)</span></span>
+              <UploadField bind:value={p.piagam} required /></label>
           </div>
           {#if prestasi.length > 1}
             <button type="button" class="self-start rounded-lg bg-blue-100 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-200" onclick={() => prestasi.splice(i, 1)}>🗑️</button>
@@ -216,21 +253,14 @@
       {/each}
       <button type="button" class="self-start rounded-xl border-2 border-dashed border-blue-300 px-4 py-2 text-sm font-semibold text-blue-600 transition hover:bg-blue-50" onclick={() => prestasi.push({ nama: '', tahun: '2026', tingkat: 'Provinsi', piagam: '' })}>+ Tambah Prestasi</button>
 
-      <p class="mt-2 text-xs font-semibold uppercase tracking-widest text-blue-500">Dokumen (tempel link Google Drive)</p>
-      <p class="text-[11px] text-gray-400">Di Drive: klik kanan berkas → <b>Bagikan</b> → <b>Siapa saja yang memiliki link</b> → salin tautannya ke sini.</p>
+      <p class="mt-2 text-xs font-semibold uppercase tracking-widest text-blue-500">Dokumen (unggah gambar/PDF, maks 3MB)</p>
       <div class="grid gap-4 sm:grid-cols-3">
         <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">Kartu Keluarga (KK) *</span>
-          <input required={!(editId || editIndex !== null) || !files.kk} type="url" bind:value={files.kk} placeholder="https://drive.google.com/..." title="Harus link Google Drive" pattern={DRIVE_RX}
-            class="w-full rounded-xl border border-gray-200 px-3 py-2 text-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
-          {#if files.kk}<a href={files.kk} target="_blank" rel="noopener" class="mt-1 inline-block truncate text-xs font-medium text-blue-600 hover:text-blue-800">📎 Cek link</a>{/if}</label>
+          <UploadField bind:value={files.kk} required={!isEdit || !files.kk} /></label>
         <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">Akte Kelahiran *</span>
-          <input required={!(editId || editIndex !== null) || !files.akte} type="url" bind:value={files.akte} placeholder="https://drive.google.com/..." title="Harus link Google Drive" pattern={DRIVE_RX}
-            class="w-full rounded-xl border border-gray-200 px-3 py-2 text-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
-          {#if files.akte}<a href={files.akte} target="_blank" rel="noopener" class="mt-1 inline-block truncate text-xs font-medium text-blue-600 hover:text-blue-800">📎 Cek link</a>{/if}</label>
+          <UploadField bind:value={files.akte} required={!isEdit || !files.akte} /></label>
         <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">KTP <span class="font-normal text-gray-400">(jika sudah punya)</span></span>
-          <input type="url" bind:value={files.ktp} placeholder="https://drive.google.com/..." title="Harus link Google Drive" pattern={DRIVE_RX}
-            class="w-full rounded-xl border border-gray-200 px-3 py-2 text-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
-          {#if files.ktp}<a href={files.ktp} target="_blank" rel="noopener" class="mt-1 inline-block truncate text-xs font-medium text-blue-600 hover:text-blue-800">📎 Cek link</a>{/if}</label>
+          <UploadField bind:value={files.ktp} /></label>
       </div>
 
     {:else if section === 'pelatih'}
@@ -252,10 +282,8 @@
         {:else}
           <CaborCombobox bind:value={pelatih.cabor} pinned={null} allowCustom />
         {/if}</label>
-      <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">Lisensi Pelatih * <span class="font-normal text-gray-400">(link Google Drive)</span></span>
-        <input required bind:value={pelatih.fileLisensi} type="url" placeholder="https://drive.google.com/file/d/..." title="Harus link Google Drive" pattern={DRIVE_RX}
-          class="w-full rounded-xl border border-gray-200 px-3 py-2 text-xs outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" />
-        {#if pelatih.fileLisensi}<a href={pelatih.fileLisensi} target="_blank" rel="noopener" class="mt-1 inline-block truncate text-xs font-medium text-blue-600 hover:text-blue-800">📎 Cek link</a>{/if}</label>
+      <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">Lisensi Pelatih * <span class="font-normal text-gray-400">(gambar/PDF, maks 3MB)</span></span>
+        <UploadField bind:value={pelatih.fileLisensi} required /></label>
 
     {:else if section === 'jadwal'}
       <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">Tempat Latihan *</span>
@@ -283,6 +311,44 @@
           <input required type="time" bind:value={jadwal.jamSelesai} class="w-full rounded-xl border border-gray-200 px-3 py-2 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>
       </div>
 
+    {:else if section === 'medali'}
+      <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">Cabang Olahraga *</span>
+        {#if opCabor}
+          <input type="text" value={opCabor} disabled class="w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500 outline-none" />
+        {:else}
+          <CaborCombobox bind:value={medali.cabor} pinned={null} allowCustom />
+        {/if}</label>
+      <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">Periode * <span class="font-normal text-gray-400">(PORPROV tiap 2 tahun)</span></span>
+        <select required bind:value={medali.periode} class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
+          <option value="" disabled>Pilih periode</option>
+          {#if isEdit && medali.periode && !PERIODE.includes(medali.periode)}<option value={medali.periode}>{medali.periode}</option>{/if}
+          {#each PERIODE as p (p)}<option value={p}>{p}</option>{/each}
+        </select></label>
+
+      <p class="mt-2 text-xs font-semibold uppercase tracking-widest text-blue-500">1. Target Medali <span class="font-normal normal-case text-gray-400">— diisi minggu pertama Januari 2027</span></p>
+      <div class="form-field grid gap-3 sm:grid-cols-3">
+        <label class="text-sm"><span class="mb-1 block font-medium text-gray-600">🥇 Emas</span>
+          <input required type="number" min="0" bind:value={medali.targetEmas} class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>
+        <label class="text-sm"><span class="mb-1 block font-medium text-gray-600">🥈 Perak</span>
+          <input required type="number" min="0" bind:value={medali.targetPerak} class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>
+        <label class="text-sm"><span class="mb-1 block font-medium text-gray-600">🥉 Perunggu</span>
+          <input required type="number" min="0" bind:value={medali.targetPerunggu} class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>
+      </div>
+
+      <p class="mt-2 text-xs font-semibold uppercase tracking-widest text-blue-500">2. Perolehan Medali <span class="font-normal normal-case text-gray-400">— diisi setelah PORPROV X selesai</span></p>
+      {#if isEdit}
+        <div class="form-field grid gap-3 sm:grid-cols-3">
+          <label class="text-sm"><span class="mb-1 block font-medium text-gray-600">🥇 Emas</span>
+            <input required type="number" min="0" bind:value={medali.hasilEmas} class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>
+          <label class="text-sm"><span class="mb-1 block font-medium text-gray-600">🥈 Perak</span>
+            <input required type="number" min="0" bind:value={medali.hasilPerak} class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>
+          <label class="text-sm"><span class="mb-1 block font-medium text-gray-600">🥉 Perunggu</span>
+            <input required type="number" min="0" bind:value={medali.hasilPerunggu} class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>
+        </div>
+      {:else}
+        <p class="rounded-xl bg-blue-50/70 px-4 py-3 text-xs leading-relaxed text-gray-500">Perolehan medali dapat diisi setelah target tersimpan — buka daftar lalu klik tombol <b>🏅 Perolehan</b> pada baris cabor ini.</p>
+      {/if}
+
     {:else if section === 'pengurus'}
       <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">Nama *</span>
         <input required bind:value={pengurus.nama} class="w-full rounded-xl border border-gray-200 px-3 py-2 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>
@@ -290,8 +356,8 @@
         <input required bind:value={pengurus.jabatan} placeholder="cth: Ketua Bidang Pembinaan" class="w-full rounded-xl border border-gray-200 px-3 py-2 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>
       <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">Biodata *</span>
         <textarea required rows="4" bind:value={pengurus.bio} placeholder="1 paragraf biodata pengurus..." class="w-full rounded-xl border border-gray-200 px-3 py-2 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"></textarea></label>
-      <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">URL Foto <span class="font-normal text-gray-400">(Google Drive)</span></span>
-        <input type="url" bind:value={pengurus.foto} placeholder="https://drive.google.com/... (kosongkan untuk default)" title="Harus link Google Drive" pattern={DRIVE_RX} class="w-full rounded-xl border border-gray-200 px-3 py-2 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100" /></label>
+      <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">URL Foto <span class="font-normal text-gray-400">(gambar, maks 3MB — kosongkan untuk default)</span></span>
+        <UploadField bind:value={pengurus.foto} accept="image/jpeg,image/png,image/webp" placeholder="Pilih foto pengurus (maks 3MB)" /></label>
 
     {:else if section === 'users'}
       <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">Nama *</span>
@@ -320,11 +386,12 @@
       <p class="text-center text-gray-400">Section tidak ditemukan.</p>
     {/if}
 
+    {#if saveError}<p class="rounded-xl bg-red-50 px-4 py-2.5 text-sm font-semibold text-red-600">⚠️ {saveError}</p>{/if}
     {#if active}
       <div class="mt-2 flex justify-end gap-2 border-t border-gray-100 pt-4">
-        <a href="/admin#{section}" class="rounded-xl px-4 py-2.5 text-sm font-semibold text-gray-500 hover:bg-gray-100">Batal</a>
+        <button type="button" class="rounded-xl px-4 py-2.5 text-sm font-semibold text-gray-500 hover:bg-gray-100" onclick={() => onDone?.()}>Batal</button>
         <button type="submit" disabled={busy} class="flex items-center gap-2 rounded-xl bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-blue-600/30 hover:bg-blue-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60">
-          {#if busy}<span class="spinner"></span> Menyimpan...{:else if editId || editIndex !== null}💾 Update{:else}💾 Simpan{/if}
+          {#if busy}<span class="spinner"></span> Menyimpan...{:else if isEdit}💾 Update{:else}💾 Simpan{/if}
         </button>
       </div>
     {/if}

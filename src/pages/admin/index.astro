@@ -8,6 +8,18 @@ import "../../styles/global.css";
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" type="image/png" href="/logo.png" />
+        <style is:global>
+            /* anti-flash: sesi aktif → halaman login disembunyikan sejak sebelum first paint */
+            html[data-auth="in"] .login-view {
+                display: none;
+            }
+        </style>
+        <script is:inline>
+            try {
+                if (localStorage.getItem("binpres-user"))
+                    document.documentElement.dataset.auth = "in";
+            } catch {}
+        </script>
         <title>Admin BINPRES KONI Kota Probolinggo</title>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
