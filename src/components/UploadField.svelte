@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { slide } from 'svelte/transition';
-	import { API, uploadFile } from '../lib/store.svelte';
+	import { API, deleteUpload, uploadFile } from '../lib/store.svelte';
 
 	// value = URL berkas hasil upload (/uploads/xxx) — atau link lama dari data lama
 	let {
@@ -19,6 +19,8 @@
 	let err = $state('');
 	let fileName = $state('');
 	let inputEl = $state<HTMLInputElement>();
+	// URL file yang baru diunggah di sesi form ini — boleh dihapus dari server saat tombol Hapus
+	let freshUrl = $state('');
 
 	async function pick(e: Event) {
 		const input = e.currentTarget as HTMLInputElement;
@@ -34,6 +36,7 @@
 		const r = await uploadFile(file);
 		busy = false;
 		if (r.ok && r.url) {
+			freshUrl = r.url;
 			value = `${API}${r.url}`;
 			fileName = file.name;
 		} else {
@@ -43,7 +46,11 @@
 	}
 
 	function clear() {
+		// file sesi ini dihapus dari server; file lama milik baris dibiakan —
+		// cascade PATCH/DELETE di backend yang mengurusnya (aman kalau batal edit)
+		if (freshUrl && value === `${API}${freshUrl}`) deleteUpload(freshUrl);
 		value = '';
+		freshUrl = '';
 		fileName = '';
 		if (inputEl) inputEl.value = '';
 	}

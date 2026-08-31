@@ -237,6 +237,11 @@ export async function deleteRow(sectionId: string, id: string) {
   return r;
 }
 
+// hapus berkas hasil upload di server (tombol Hapus di UploadField utk file sesi ini)
+export async function deleteUpload(url: string) {
+  return api('/api/upload', { method: 'DELETE', body: JSON.stringify({ url }) });
+}
+
 // Unggah gambar/PDF (maks 3MB di server) → { ok, url }
 export async function uploadFile(file: File): Promise<{ ok: boolean; url?: string; error?: string }> {
   const fd = new FormData();
