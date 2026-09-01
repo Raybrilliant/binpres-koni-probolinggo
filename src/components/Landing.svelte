@@ -335,7 +335,7 @@
 
         {#if ketuaCard}
           <div class="mb-4 flex justify-center lg:mb-8">
-            <div class="w-full max-w-sm">{@render pengurusCard(ketuaCard, 'ketua', 'bg-blue-700')}</div>
+            <div class="w-full max-w-sm">{@render pengurusCard(ketuaCard, 'ketua', 'w-full bg-blue-700')}</div>
           </div>
         {/if}
         <div class="flex flex-col gap-4 lg:flex-row">
