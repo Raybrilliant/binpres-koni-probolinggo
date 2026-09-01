@@ -503,7 +503,7 @@
                   <td class="px-3 py-3 text-gray-400">{(list.page - 1) * PER_PAGE + i + 1}</td>
                   {#each active.fields as f (f.key)}
                     <td class="px-3 py-3 font-medium">
-                      {#if f.type === 'date'}{prettyDate(String(row[f.key] ?? ''))}{:else}{row[f.key]}{/if}
+                      {#if f.type === 'date'}{prettyDate(String(row[f.key] ?? ''))}{:else if f.key === 'nama' && (active.id === 'atlit' || active.id === 'pelatih')}<span class="flex items-center gap-2.5">{#if String(row.foto ?? '').trim()}<img src={String(row.foto)} alt="" class="h-9 w-9 shrink-0 rounded-full object-cover object-top ring-2 ring-blue-100" loading="lazy" />{:else}<span class="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-blue-100 text-sm">{active.icon}</span>{/if}<span class="min-w-0">{row[f.key]}</span></span>{:else}{row[f.key]}{/if}
                     </td>
                   {/each}
                   <td class="whitespace-nowrap px-3 py-3 text-right">

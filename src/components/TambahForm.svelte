@@ -24,12 +24,12 @@
   const TINGKAT = ['Provinsi', 'Nasional', 'Internasional'];
 
   let atlit = $state({
-    nama: '', tempatLahir: '', tanggalLahir: '', jenisKelamin: 'Laki-laki', alamat: '', cabor: '', proyeksiPorprov: 'Tidak',
+    nama: '', tempatLahir: '', tanggalLahir: '', jenisKelamin: 'Laki-laki', alamat: '', foto: '', cabor: '', proyeksiPorprov: 'Tidak',
   });
   let prestasi = $state([{ nama: '', tahun: '2026', tingkat: 'Provinsi', piagam: '' }]);
   let files = $state<{ kk: string; akte: string; ktp: string }>({ kk: '', akte: '', ktp: '' });
 
-  let pelatih = $state({ nama: '', alamat: '', jenisKelamin: 'Laki-laki', lisensi: '', fileLisensi: '', cabor: '' });
+  let pelatih = $state({ nama: '', alamat: '', jenisKelamin: 'Laki-laki', lisensi: '', fileLisensi: '', foto: '', cabor: '' });
   let jadwal = $state({ tempat: '', cabor: '', hariMulai: 'Senin', hariSelesai: 'Senin', jamMulai: '', jamSelesai: '' });
   let medali = $state({ cabor: '', periode: '', targetEmas: 0, targetPerak: 0, targetPerunggu: 0, hasilEmas: 0, hasilPerak: 0, hasilPerunggu: 0 });
   let pengurus = $state({ nama: '', jabatan: '', bio: '', foto: '' });
@@ -132,6 +132,7 @@
         jenisKelamin: row.jenisKelamin ?? 'Laki-laki', alamat: row.alamat ?? '',
         cabor: String(row.cabor ?? ''),
         proyeksiPorprov: String(row.proyeksiPorprov ?? '') || 'Tidak',
+        foto: String(row.foto ?? ''),
       });
       prestasi.length = 0;
       const list = row.prestasi?.length ? row.prestasi : [{ nama: '', tahun: '2026', tingkat: 'Provinsi', piagam: '' }];
@@ -145,7 +146,7 @@
       );
       Object.assign(files, { kk: row.kk ?? '', akte: row.akte ?? '', ktp: row.ktp ?? '' });
     } else if (section === 'pelatih') {
-      Object.assign(pelatih, { nama: row.nama ?? '', alamat: row.alamat ?? '', jenisKelamin: row.jenisKelamin ?? 'Laki-laki', lisensi: row.lisensi ?? '', fileLisensi: row.fileLisensi ?? '', cabor: String(row.cabor ?? '') });
+      Object.assign(pelatih, { nama: row.nama ?? '', alamat: row.alamat ?? '', jenisKelamin: row.jenisKelamin ?? 'Laki-laki', lisensi: row.lisensi ?? '', fileLisensi: row.fileLisensi ?? '', foto: String(row.foto ?? ''), cabor: String(row.cabor ?? '') });
     } else if (section === 'jadwal') {
       const [hariMulai = 'Senin', hariSelesai = ''] = String(row.hari ?? 'Senin').split(' - ');
       const [jamMulai = '', jamSelesai = ''] = String(row.jam ?? '').split(' - ');
@@ -215,6 +216,8 @@
           <select bind:value={atlit.jenisKelamin} class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
             <option>Laki-laki</option><option>Perempuan</option>
           </select></label>
+        <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">Foto Profil <span class="font-normal text-gray-400">(setengah badan, maks 3MB)</span></span>
+          <UploadField bind:value={atlit.foto} accept="image/jpeg,image/png,image/webp" placeholder="Pilih foto setengah badan (maks 3MB)" /></label>
         <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">Atlit Proyeksi Porprov X</span>
           <select bind:value={atlit.proyeksiPorprov} class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100">
             <option>Tidak</option><option>Ya</option>
@@ -282,8 +285,10 @@
         {:else}
           <CaborCombobox bind:value={pelatih.cabor} pinned={null} allowCustom />
         {/if}</label>
-      <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">Lisensi Pelatih * <span class="font-normal text-gray-400">(gambar/PDF, maks 3MB)</span></span>
-        <UploadField bind:value={pelatih.fileLisensi} /></label>
+    <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">Foto Profil <span class="font-normal text-gray-400">(setengah badan, maks 3MB)</span></span>
+      <UploadField bind:value={pelatih.foto} accept="image/jpeg,image/png,image/webp" placeholder="Pilih foto setengah badan (maks 3MB)" /></label>
+    <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">Lisensi Pelatih * <span class="font-normal text-gray-400">(gambar/PDF, maks 3MB)</span></span>
+      <UploadField bind:value={pelatih.fileLisensi} /></label>
 
     {:else if section === 'jadwal'}
       <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">Tempat Latihan *</span>
