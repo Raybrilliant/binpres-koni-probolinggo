@@ -14,14 +14,14 @@
     photos: string[];
   } = $props();
 
-  let expanded = $state(-1);
+  let expanded = $state<number | 'ketua'>(-1);
 
   // statistik live dari spreadsheet (via store)
   const countOf = (id: string) => db.sections.find((s) => s.id === id)?.rows.length ?? 0;
   const stats = $derived({ atlit: countOf('atlit'), pelatih: countOf('pelatih'), klub: countOf('klub') });
 
   // pengurus live dari database (dikelola lewat panel admin)
-  const cards = $derived(
+  const allCards = $derived(
     (db.sections.find((s) => s.id === 'pengurus')?.rows ?? []).map((p, i) => ({
       nama: String(p.nama ?? ''),
       jabatan: String(p.jabatan ?? ''),
@@ -29,13 +29,9 @@
       foto: p.foto ? String(p.foto) : photos[i % photos.length],
     }))
   );
-
-  // ketua KONI: statis di atas pengurus binpres (foto: taruh di public/ketua-koni.jpg)
-  const ketua = {
-    nama: 'Ir. H. ZULFIKAR IMAWAN',
-    jabatan: 'Ketua KONI Kota Probolinggo · Periode 2025-2029',
-    foto: '/ketua-koni.jpg',
-  };
+  // ketua KONI dipisah ke kartu atas — dideteksi dari jabatan mengandung "ketua koni"
+  const ketuaCard = $derived(allCards.find((c) => c.jabatan.toLowerCase().includes('ketua koni')) ?? null);
+  const cards = $derived(allCards.filter((c) => c !== ketuaCard));
 
   // narasi bidang pembinaan prestasi (4 fokus utama)
   const narasi = [
@@ -309,23 +305,6 @@
         <p class="mx-auto mt-2 max-w-md text-sm text-gray-400">Klik kartu untuk melihat biodata pengurus</p>
       </div>
 
-      <!-- Ketua KONI: di atas pengurus binpres -->
-      <div class="mb-4 flex justify-center lg:mb-8">
-        <div class="pengurus-card group relative h-105 w-full max-w-sm overflow-hidden rounded-3xl bg-blue-700 text-white shadow-xl ring-1 ring-blue-200">
-          <img
-            src={ketua.foto}
-            alt={ketua.nama}
-            class="absolute inset-x-0 top-0 h-72 w-full object-cover object-top transition-transform duration-500 group-hover:scale-105"
-            loading="lazy"
-            onerror={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = photos[0]; }}
-          />
-          <div class="absolute inset-x-0 bottom-0 p-5">
-            <p class="text-base font-bold">{ketua.nama}</p>
-            <p class="mt-0.5 text-xs font-medium text-blue-100">{ketua.jabatan}</p>
-          </div>
-        </div>
-      </div>
-
       {#if !ui.loaded}
         <!-- skeleton saat menunggu data dari server -->
         <div class="flex flex-col gap-4 lg:flex-row">
@@ -334,28 +313,37 @@
           {/each}
         </div>
       {:else}
-        <div class="flex flex-col gap-4 lg:flex-row">
-        {#each cards as p, i (i)}
+        {#snippet pengurusCard(p: { nama: string; jabatan: string; bio: string; foto: string }, key: number | 'ketua', rowClass: string)}
           <button
-            class="pengurus-card group relative h-105 shrink-0 overflow-hidden rounded-3xl bg-blue-600 text-left text-white shadow-xl ring-1 ring-blue-200 transition-all duration-500 ease-out {expanded === i ? 'lg:grow-[3.5] lg:basis-0' : 'lg:grow lg:basis-0 hover:-translate-y-1'}"
-            onclick={() => (expanded = expanded === i ? -1 : i)}>
+            class="pengurus-card group relative h-105 shrink-0 overflow-hidden rounded-3xl {rowClass || 'bg-blue-600'} text-left text-white shadow-xl ring-1 ring-blue-200 transition-all duration-500 ease-out {expanded === key ? 'lg:grow-[3.5] lg:basis-0' : 'lg:grow lg:basis-0 hover:-translate-y-1'}"
+            onclick={() => (expanded = expanded === key ? -1 : key)}>
             <img src={p.foto} alt={p.nama} class="absolute inset-x-0 top-0 h-72 w-full object-cover object-top transition-transform duration-500 group-hover:scale-105" loading="lazy" />
-              <div class="absolute inset-x-0 bottom-0 p-5">
+            <div class="absolute inset-x-0 bottom-0 p-5">
               <p class="text-base font-bold">{p.nama}</p>
               <p class="mt-0.5 text-xs font-medium text-blue-100">{p.jabatan}</p>
 
               <!-- panel biodata: muncul saat expand (mobile: fade-in; desktop: muncul dari kanan) -->
-              <div class="grid transition-all duration-500 {expanded === i ? 'mt-3 grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}">
+              <div class="grid transition-all duration-500 {expanded === key && p.bio ? 'mt-3 grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}">
                 <div class="overflow-hidden">
                   <p class="max-w-md text-[12.5px] leading-relaxed text-white/80">{p.bio}</p>
                 </div>
               </div>
             </div>
-            <span class="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full bg-white/20 text-xs backdrop-blur transition-transform duration-500 {expanded === i ? 'rotate-45' : ''}">✕</span>
+            <span class="absolute right-4 top-4 grid h-8 w-8 place-items-center rounded-full bg-white/20 text-xs backdrop-blur transition-transform duration-500 {expanded === key ? 'rotate-45' : ''}">✕</span>
           </button>
+        {/snippet}
+
+        {#if ketuaCard}
+          <div class="mb-4 flex justify-center lg:mb-8">
+            <div class="w-full max-w-sm">{@render pengurusCard(ketuaCard, 'ketua', 'bg-blue-700')}</div>
+          </div>
+        {/if}
+        <div class="flex flex-col gap-4 lg:flex-row">
+        {#each cards as p, i (i)}
+          {@render pengurusCard(p, i, '')}
         {/each}
         </div>
-        {#if cards.length === 0}
+        {#if allCards.length === 0}
           <p class="py-10 text-center text-sm text-gray-400">Data pengurus akan segera diperbarui.</p>
         {/if}
       {/if}
