@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { db, addRow, updateRow, refresh, ui, auth, PERIODE, type Row } from '../lib/store.svelte';
+  import { db, addRow, updateRow, fetchRow, auth, PERIODE, type Row } from '../lib/store.svelte';
   import CaborCombobox from './CaborCombobox.svelte';
   import UploadField from './UploadField.svelte';
   import gsap from 'gsap';
@@ -47,15 +47,7 @@
     try {
       let r: { ok: boolean; error?: string };
       if (isEdit) {
-        const target = findRow();
-        if (target?.id) {
-          r = await updateRow(section, target.id, collect());
-        } else if (target) {
-          Object.assign(target, collect());
-          r = { ok: true };
-        } else {
-          r = { ok: false, error: 'Data tidak ditemukan' };
-        }
+        r = await updateRow(section, String(editId), collect());
       } else {
         r = await addRow(section === 'atlit' ? 'atlit' : section === 'pelatih' ? 'pelatih' : section === 'jadwal' ? 'jadwal' : section, collect());
       }
@@ -112,18 +104,11 @@
     return o;
   }
 
-  function findRow(): Row | null {
-    const rows = db.sections.find((x) => x.id === section)?.rows ?? [];
-    if (isEdit) return rows.find((r) => r.id === editId) ?? null;
-    return null;
-  }
-
-  // Prefill form dari data existing saat mode edit
+  // Prefill form dari server (GET /api/{section}/:id) saat mode edit
   async function fill() {
     if (!isEdit) return;
     try {
-      if (!ui.loaded) await refresh();
-      const row = findRow();
+      const row = await fetchRow(section, editId!);
       if (!row) return;
     if (section === 'atlit') {
       Object.assign(atlit, {

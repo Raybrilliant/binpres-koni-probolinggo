@@ -1,12 +1,12 @@
 <script lang="ts">
   import type { Row } from '../lib/store.svelte';
-  import { CABOR, PERIODE } from '../lib/store.svelte';
+  import { PERIODE } from '../lib/store.svelte';
 
   import { onMount } from 'svelte';
   import { fade, fly, scale } from 'svelte/transition';
   import { tick } from 'svelte';
   import gsap from 'gsap';
-  import { db, auth, login, logout, deleteRow, ui, notify } from '../lib/store.svelte';
+  import { db, auth, login, logout, deleteRow, ui, notify, list, stats, fetchList, fetchStats, fetchRow, PER_PAGE } from '../lib/store.svelte';
   import TambahForm from './TambahForm.svelte';
 
   // form tambah/edit inline (tanpa reload halaman)
@@ -30,6 +30,7 @@
     busy = false;
     if (!loginError) {
       view = auth.user?.cabor === 'Semua' ? 'dashboard' : 'atlit';
+      openView(view);
       // animasi sidebar hanya di desktop — di mobile sidebar dalam keadaan tertutup (drawer)
       if (matchMedia('(min-width: 1024px)').matches)
         gsap.from('.sidebar', { x: -60, autoAlpha: 0, duration: 0.5, ease: 'power3.out' });
@@ -40,10 +41,7 @@
   }
   let openCabang = $state(true);
   let sidebarOpen = $state(false); // drawer menu di mobile
-  let search = $state('');
-  let filterPeriode = $state('');
-  let page = $state(1);
-  const perPage = 5;
+  let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
   const isAdmin = $derived(!auth.user || auth.user.cabor === 'Semua');
   const menuSections = $derived(isAdmin ? sections : sections.filter((s) => !['users', 'pengurus'].includes(s.id)));
@@ -52,92 +50,23 @@
   // non-admin: tolak akses ke section terlarang (dashboard/users/pengurus)
   const allowedView = $derived(isAdmin || !['dashboard', 'users', 'pengurus'].includes(view));
 
-  // RBAC: admin lihat semua; operator hanya data yang dibuat sendiri (kolom createdBy)
-  const scopedRows = $derived.by(() => {
-    if (!active) return [];
-    if (isAdmin) return active.rows;
-    if (!['atlit', 'pelatih', 'jadwal', 'klub'].includes(active.id)) return []; // cegah bocor via hash URL
-    const me = auth.user!.username;
-    return active.rows.filter((r) => String(r.createdBy ?? '') === me);
-  });
-  const periodeOptions = $derived(active?.id === 'medali' ? PERIODE : []);
-  const filtered = $derived(
-    scopedRows
-      .filter((r) => (active?.id === 'medali' && filterPeriode ? String(r.periode ?? '') === filterPeriode : true))
-      .filter((r) =>
-        Object.values(r).join(' ').toLowerCase().includes(search.toLowerCase())
-    )
-  );
-  const totalPages = $derived(Math.max(1, Math.ceil(filtered.length / perPage)));
-  const paged = $derived(filtered.slice((page - 1) * perPage, page * perPage));
+  const totalPages = $derived(Math.max(1, Math.ceil(list.total / PER_PAGE)));
 
   $effect(() => {
     if (!allowedView) view = 'atlit';
   });
 
-  // ===== statistik dashboard =====
-  function perCabor(rows: Row[], field = 'cabor') {
-    const m: Record<string, number> = {};
-    CABOR.forEach((c) => (m[c] = 0));
-    rows.forEach((r) => {
-      const c = String(r[field] ?? '').trim();
-      if (!c) return;
-      m[c] = (m[c] ?? 0) + 1; // nilai legacy di luar daftar resmi ikut dihitung
-    });
-    return Object.entries(m)
-      .map(([name, count]) => ({ name, count }))
-      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)); // terbanyak di atas
-  }
-  const allRows = $derived({
-    atlit: sections.find((s) => s.id === 'atlit')?.rows ?? [],
-    pelatih: sections.find((s) => s.id === 'pelatih')?.rows ?? [],
-    klub: sections.find((s) => s.id === 'klub')?.rows ?? [],
-    medali: sections.find((s) => s.id === 'medali')?.rows ?? [],
-  });
-  const atlitPerCabor = $derived(perCabor(allRows.atlit));
-  const pelatihPerCabor = $derived(perCabor(allRows.pelatih));
-  const klubPerCabor = $derived(perCabor(allRows.klub, 'cabang'));
-  const maxA = $derived(Math.max(1, ...atlitPerCabor.map((x) => x.count)));
-  const maxP = $derived(Math.max(1, ...pelatihPerCabor.map((x) => x.count)));
-  const maxK = $derived(Math.max(1, ...klubPerCabor.map((x) => x.count)));
+  // periode dropdown khusus medali (opsi tetap dari konstanta PERIODE)
+  const periodeOptions = $derived(active?.id === 'medali' ? PERIODE : []);
 
-  // total target vs perolehan medali (semua cabor)
-  const medaliTotal = $derived.by(() => {
-    const t = { e: 0, p: 0, b: 0 };
-    const h = { e: 0, p: 0, b: 0 };
-    for (const r of allRows.medali) {
-      t.e += Number(r.targetEmas) || 0;
-      t.p += Number(r.targetPerak) || 0;
-      t.b += Number(r.targetPerunggu) || 0;
-      h.e += Number(r.hasilEmas) || 0;
-      h.p += Number(r.hasilPerak) || 0;
-      h.b += Number(r.hasilPerunggu) || 0;
-    }
-    return { t, h };
-  });
+  // ===== statistik dashboard — angka dari /api/stats (agregasi SQL di server) =====
+  const maxA = $derived(Math.max(1, ...stats.atlitPerCabor.map((x) => x.count)));
+  const maxP = $derived(Math.max(1, ...stats.pelatihPerCabor.map((x) => x.count)));
+  const maxK = $derived(Math.max(1, ...stats.klubPerCabang.map((x) => x.count)));
+  const maxProj = $derived(Math.max(1, ...stats.atlitProyeksi.map((x) => x.count)));
+  const totalProyeksi = $derived(stats.atlitProyeksi.reduce((s, x) => s + x.count, 0));
 
-  // atlit proyeksi Porprov X: hanya baris dengan proyeksiPorprov = 'Ya'
-  const atlitProyeksi = $derived(
-    perCabor(allRows.atlit.filter((r) => String(r.proyeksiPorprov ?? '').trim().toLowerCase() === 'ya')).filter((x) => x.count > 0)
-  );
-  const maxProj = $derived(Math.max(1, ...atlitProyeksi.map((x) => x.count)));
-  const totalProyeksi = $derived(atlitProyeksi.reduce((s, x) => s + x.count, 0));
-
-  const TINGKAT_PRESTASI = ['Internasional', 'Nasional', 'Provinsi'];
   const tingkatIcon: Record<string, string> = { Internasional: '🌍', Nasional: '🇮🇩', Provinsi: '🏙️' };
-  const prestasiTingkat = $derived.by(() => {
-    const m: Record<string, number> = {};
-    TINGKAT_PRESTASI.forEach((t) => (m[t] = 0));
-    let total = 0;
-    (sections.find((s) => s.id === 'atlit')?.rows ?? []).forEach((r) =>
-      ((r.prestasi ?? []) as Row[]).forEach((p) => {
-        const t = String(p.tingkat ?? '').trim() || 'Lainnya';
-        total++;
-        m[t] = (m[t] ?? 0) + 1;
-      })
-    );
-    return { total, rows: Object.entries(m).map(([name, count]) => ({ name, count })) };
-  });
 
   function animateContent() {
     gsap.fromTo(
@@ -149,15 +78,20 @@
 
   function setView(v: string) {
     view = v;
-    search = '';
-    filterPeriode = '';
-    page = 1;
+  }
+
+  // buka view: daftar data di-fetch per halaman dari server; dashboard tarik agregasi stats
+  function openView(v: string) {
+    setView(v);
+    if (!auth.user) return;
+    if (v === 'dashboard') fetchStats();
+    else fetchList(v);
   }
 
   function navigate(v: string) {
     form = null; // pindah menu selalu menutup form tambah/edit
     sidebarOpen = false;
-    setView(v);
+    openView(v);
     // simpan ke URL agar refresh/back kembali ke page yang sama
     if (location.hash.slice(1) !== v) history.replaceState(null, '', '#' + v);
   }
@@ -167,15 +101,27 @@
     const hash = location.hash.slice(1);
     if (!hash) return;
     if (hash === 'dashboard') {
-      if (isAdmin) setView('dashboard');
+      if (isAdmin) openView('dashboard');
       return;
     }
-    if (menuSections.some((s) => s.id === hash)) setView(hash);
+    if (menuSections.some((s) => s.id === hash)) openView(hash);
+  }
+
+  // pencarian server-side dengan debounce agar tidak nembak request per ketikan
+  function applyFilter() {
+    if (active) fetchList(active.id, { page: 1, q: list.q, periode: list.periode });
+  }
+  function onSearch() {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(applyFilter, 300);
+  }
+  function gotoPage(p: number) {
+    if (active) fetchList(active.id, { page: p, q: list.q, periode: list.periode });
   }
 
   function goToEdit(i: number) {
     if (!active) return;
-    const row = filtered[(page - 1) * perPage + i];
+    const row = list.rows[i];
     form = { section: active.id, id: row?.id ?? null };
   }
 
@@ -183,14 +129,19 @@
     if (!active || busy || !confirm('Hapus data ini?')) return;
     busy = true;
     try {
-      const row = filtered[(page - 1) * perPage + i];
-      if (row.id) await deleteRow(active.id, row.id);
-      else {
-        active.rows.splice((page - 1) * perPage + i, 1);
-        if (page > totalPages) page = totalPages;
-      }
+      const row = list.rows[i];
+      if (row?.id) await deleteRow(active.id, row.id);
     } finally {
       busy = false;
+    }
+  }
+
+  // modal detail: atlit butuh daftar prestasi → ambil baris penuh by id
+  async function openDetail(row: Row) {
+    detail = row;
+    if (active?.id === 'atlit' && row.id != null) {
+      const fresh = await fetchRow('atlit', row.id);
+      if (fresh) detail = fresh;
     }
   }
 
@@ -395,7 +346,7 @@
       </div>
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {#each sections as s (s.id)}
-          {#if !ui.loaded}
+          {#if !stats.loaded}
             <div class="content-card animate-pulse rounded-2xl bg-white p-5 shadow-lg ring-1 ring-gray-100">
               <div class="h-8 w-8 rounded-lg bg-gray-200"></div>
               <div class="mt-4 h-8 w-14 rounded-lg bg-gray-200"></div>
@@ -407,7 +358,7 @@
             onclick={() => navigate(s.id)}>
             <div class="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-blue-50 transition-transform duration-300 group-hover:scale-125"></div>
             <span class="relative text-3xl">{s.icon}</span>
-            <p class="relative mt-3 text-3xl font-bold text-blue-600">{s.rows.length}</p>
+            <p class="relative mt-3 text-3xl font-bold text-blue-600">{stats.totals[s.id] ?? 0}</p>
             <p class="relative text-sm text-gray-500">Total {s.label}</p>
             <span class="relative mt-2 inline-block text-xs font-semibold text-blue-500 opacity-0 transition-opacity group-hover:opacity-100">Kelola →</span>
           </button>
@@ -432,9 +383,9 @@
         <div class="content-card rounded-2xl bg-white p-5 shadow-lg ring-1 ring-gray-100">
           <div class="mb-3 flex items-center justify-between">
             <p class="flex items-center gap-2 font-bold">{icon} {title}</p>
-            <span class="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-600">{ui.loaded ? totalLabel : '…'}</span>
+            <span class="rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-bold text-blue-600">{stats.loaded ? totalLabel : '…'}</span>
           </div>
-          {#if !ui.loaded}
+          {#if !stats.loaded}
             {#each Array(4) as _, i (i)}<div class="mb-3 h-2.5 w-full animate-pulse rounded-full bg-gray-100"></div>{/each}
           {:else}
             <div class="max-h-64 overflow-y-auto pr-1">{@render bars(rows, max)}</div>
@@ -443,14 +394,14 @@
       {/snippet}
 
       <div class="mt-6 grid gap-4 xl:grid-cols-3">
-        {@render caborPanel('🏃', 'Atlit / Cabor', atlitPerCabor, maxA, `${allRows.atlit.length} atlit`)}
-        {@render caborPanel('🎯', 'Pelatih / Cabor', pelatihPerCabor, maxP, `${allRows.pelatih.length} pelatih`)}
-        {@render caborPanel('🏟️', 'Klub/Dojang / Cabor', klubPerCabor, maxK, `${allRows.klub.length} klub/dojang`)}
+        {@render caborPanel('🏃', 'Atlit / Cabor', stats.atlitPerCabor, maxA, `${stats.totals.atlit ?? 0} atlit`)}
+        {@render caborPanel('🎯', 'Pelatih / Cabor', stats.pelatihPerCabor, maxP, `${stats.totals.pelatih ?? 0} pelatih`)}
+        {@render caborPanel('🏟️', 'Klub/Dojang / Cabor', stats.klubPerCabang, maxK, `${stats.totals.klub ?? 0} klub/dojang`)}
       </div>
 
       <div class="content-card mt-4 rounded-2xl bg-white p-5 shadow-lg ring-1 ring-gray-100">
         <p class="mb-4 flex items-center gap-2 font-bold">🏅 Medali Porprov <span class="text-xs font-medium text-gray-400">(Perolehan / Target)</span></p>
-        {#if !ui.loaded}
+        {#if !stats.loaded}
           <div class="grid gap-3 sm:grid-cols-3">
             {#each Array(3) as _, i (i)}<div class="h-20 animate-pulse rounded-xl bg-gray-100"></div>{/each}
           </div>
@@ -458,42 +409,42 @@
           <div class="grid gap-3 sm:grid-cols-3">
             <div class="rounded-xl bg-linear-to-br from-blue-50 to-blue-100/50 p-4 ring-1 ring-blue-100">
               <p class="text-xs font-semibold uppercase tracking-wide text-blue-600">🥇 Emas</p>
-              <p class="mt-1 text-2xl font-extrabold text-gray-800">{medaliTotal.h.e}<span class="text-sm font-semibold text-gray-400"> / {medaliTotal.t.e}</span></p>
+              <p class="mt-1 text-2xl font-extrabold text-gray-800">{stats.medaliTotal.h.e}<span class="text-sm font-semibold text-gray-400"> / {stats.medaliTotal.t.e}</span></p>
             </div>
             <div class="rounded-xl bg-linear-to-br from-blue-50 to-blue-100/50 p-4 ring-1 ring-blue-100">
               <p class="text-xs font-semibold uppercase tracking-wide text-blue-600">🥈 Perak</p>
-              <p class="mt-1 text-2xl font-extrabold text-gray-800">{medaliTotal.h.p}<span class="text-sm font-semibold text-gray-400"> / {medaliTotal.t.p}</span></p>
+              <p class="mt-1 text-2xl font-extrabold text-gray-800">{stats.medaliTotal.h.p}<span class="text-sm font-semibold text-gray-400"> / {stats.medaliTotal.t.p}</span></p>
             </div>
             <div class="rounded-xl bg-linear-to-br from-blue-50 to-blue-100/50 p-4 ring-1 ring-blue-100">
               <p class="text-xs font-semibold uppercase tracking-wide text-blue-600">🥉 Perunggu</p>
-              <p class="mt-1 text-2xl font-extrabold text-gray-800">{medaliTotal.h.b}<span class="text-sm font-semibold text-gray-400"> / {medaliTotal.t.b}</span></p>
+              <p class="mt-1 text-2xl font-extrabold text-gray-800">{stats.medaliTotal.h.b}<span class="text-sm font-semibold text-gray-400"> / {stats.medaliTotal.t.b}</span></p>
             </div>
           </div>
-          <p class="mt-3 text-right text-[11px] text-gray-400">Total target: {medaliTotal.t.e + medaliTotal.t.p + medaliTotal.t.b} medali • Total perolehan: {medaliTotal.h.e + medaliTotal.h.p + medaliTotal.h.b} medali</p>
+          <p class="mt-3 text-right text-[11px] text-gray-400">Total target: {stats.medaliTotal.t.e + stats.medaliTotal.t.p + stats.medaliTotal.t.b} medali • Total perolehan: {stats.medaliTotal.h.e + stats.medaliTotal.h.p + stats.medaliTotal.h.b} medali</p>
         {/if}
       </div>
 
       <div class="mt-4 grid gap-4 xl:grid-cols-2">
         <div class="content-card rounded-2xl bg-white p-5 shadow-lg ring-1 ring-gray-100">
         <p class="mb-4 flex items-center gap-2 font-bold">🏅 Prestasi Berdasarkan Tingkat</p>
-        {#if !ui.loaded}
+        {#if !stats.loaded}
           <div class="grid gap-3 sm:grid-cols-3">
             {#each Array(3) as _, i (i)}<div class="h-20 animate-pulse rounded-xl bg-gray-100"></div>{/each}
           </div>
         {:else}
           <div class="grid gap-3 sm:grid-cols-3">
-            {#each prestasiTingkat.rows as t (t.name)}
+            {#each stats.prestasiTingkat.rows as t (t.name)}
               <div class="rounded-xl bg-linear-to-br from-blue-50 to-blue-100/50 p-4 ring-1 ring-blue-100">
                 <p class="text-xs font-semibold uppercase tracking-wide text-blue-600">{tingkatIcon[t.name] ?? '🏅'} {t.name}</p>
                 <p class="mt-1 text-2xl font-extrabold text-gray-800">{t.count}</p>
               </div>
             {/each}
           </div>
-          <p class="mt-3 text-right text-[11px] text-gray-400">Total prestasi tercatat: {prestasiTingkat.total}</p>
+          <p class="mt-3 text-right text-[11px] text-gray-400">Total prestasi tercatat: {stats.prestasiTingkat.total}</p>
         {/if}
         </div>
 
-        {@render caborPanel('⭐', 'Atlit Proyeksi Porprov X', atlitProyeksi, maxProj, `${totalProyeksi} atlit`)}
+        {@render caborPanel('⭐', 'Atlit Proyeksi Porprov X', stats.atlitProyeksi, maxProj, `${totalProyeksi} atlit`)}
       </div>
     {:else if active}
       <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
@@ -512,13 +463,13 @@
           <input
             type="search"
             placeholder="🔍 Cari {active.label.toLowerCase()}..."
-            bind:value={search}
-            oninput={() => (page = 1)}
+            bind:value={list.q}
+            oninput={onSearch}
             class="w-full max-w-sm rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100" />
           {#if active.id === 'medali' && periodeOptions.length}
             <select
-              bind:value={filterPeriode}
-              oninput={() => (page = 1)}
+              bind:value={list.periode}
+              onchange={applyFilter}
               class="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100">
               <option value="">Semua Periode</option>
               {#each periodeOptions as p (p)}<option value={p}>{p}</option>{/each}
@@ -538,8 +489,8 @@
               </tr>
             </thead>
             <tbody>
-              {#if !ui.loaded || ui.refreshing}
-                {#each Array(5) as _, i (i)}
+              {#if list.loading}
+                {#each Array(PER_PAGE) as _, i (i)}
                   <tr class="border-b border-gray-100">
                     <td class="px-3 py-3" colspan={active.fields.length + 2}>
                       <div class="h-4 w-full animate-pulse rounded bg-gray-100"></div>
@@ -547,16 +498,16 @@
                   </tr>
                 {/each}
               {:else}
-              {#each paged as row, i (page + '-' + ((page - 1) * perPage + i))}
-                <tr class="cursor-pointer border-b border-gray-100 transition-colors hover:bg-blue-50/50" onclick={() => (detail = row)}>
-                  <td class="px-3 py-3 text-gray-400">{(page - 1) * perPage + i + 1}</td>
+              {#each list.rows as row, i (row.id ?? i)}
+                <tr class="cursor-pointer border-b border-gray-100 transition-colors hover:bg-blue-50/50" onclick={() => openDetail(row)}>
+                  <td class="px-3 py-3 text-gray-400">{(list.page - 1) * PER_PAGE + i + 1}</td>
                   {#each active.fields as f (f.key)}
                     <td class="px-3 py-3 font-medium">
                       {#if f.type === 'date'}{prettyDate(String(row[f.key] ?? ''))}{:else}{row[f.key]}{/if}
                     </td>
                   {/each}
                   <td class="whitespace-nowrap px-3 py-3 text-right">
-                    <button disabled={busy} class="rounded-lg bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-200 disabled:opacity-50" onclick={(e) => { e.stopPropagation(); detail = row; }}>👁️ Detail</button>
+                    <button disabled={busy} class="rounded-lg bg-emerald-100 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-200 disabled:opacity-50" onclick={(e) => { e.stopPropagation(); openDetail(row); }}>👁️ Detail</button>
                     <button disabled={busy} class="ml-1 rounded-lg bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-700 transition hover:bg-amber-200 disabled:opacity-50" onclick={(e) => { e.stopPropagation(); goToEdit(i); }}>✏️ Edit</button>
                     {#if active.id === 'medali'}<button disabled={busy} class="ml-1 rounded-lg bg-blue-100 px-3 py-1.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-200 disabled:opacity-50" onclick={(e) => { e.stopPropagation(); goToEdit(i); }}>🏅 Perolehan</button>{/if}
                     <button disabled={busy} class="ml-1 rounded-lg bg-red-100 px-3 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-200 disabled:opacity-50" onclick={(e) => { e.stopPropagation(); remove(i); }}>{#if busy}⏳{:else}🗑️{/if} Hapus</button>
@@ -571,13 +522,13 @@
         </div>
 
         <div class="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm">
-          <span class="text-gray-500">Halaman {page} dari {totalPages} · {filtered.length} data</span>
+          <span class="text-gray-500">Halaman {list.page} dari {totalPages} · {list.total} data</span>
           <div class="flex gap-1">
-            <button class="rounded-lg border px-3 py-1.5 transition {page === 1 ? 'text-gray-300' : 'hover:bg-blue-50'}" disabled={page === 1} onclick={() => page--}>‹ Prev</button>
+            <button class="rounded-lg border px-3 py-1.5 transition {list.page === 1 ? 'text-gray-300' : 'hover:bg-blue-50'}" disabled={list.page === 1} onclick={() => gotoPage(list.page - 1)}>‹ Prev</button>
             {#each Array(totalPages) as _, i (i)}
-              <button class="rounded-lg border px-3 py-1.5 font-semibold transition {page === i + 1 ? 'border-blue-600 bg-blue-600 text-white' : 'hover:bg-blue-50'}" onclick={() => (page = i + 1)}>{i + 1}</button>
+              <button class="rounded-lg border px-3 py-1.5 font-semibold transition {list.page === i + 1 ? 'border-blue-600 bg-blue-600 text-white' : 'hover:bg-blue-50'}" onclick={() => gotoPage(i + 1)}>{i + 1}</button>
             {/each}
-            <button class="rounded-lg border px-3 py-1.5 transition {page === totalPages ? 'text-gray-300' : 'hover:bg-blue-50'}" disabled={page === totalPages} onclick={() => page++}>Next ›</button>
+            <button class="rounded-lg border px-3 py-1.5 transition {list.page === totalPages ? 'text-gray-300' : 'hover:bg-blue-50'}" disabled={list.page === totalPages} onclick={() => gotoPage(list.page + 1)}>Next ›</button>
           </div>
         </div>
       </div>

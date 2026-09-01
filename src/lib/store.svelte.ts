@@ -169,6 +169,75 @@ if (typeof localStorage !== 'undefined') localStorage.removeItem('binpres-admin-
 
 export const ui = $state({ loaded: false, toast: '', refreshing: false });
 
+// ==== daftar terpaginasi (server-side: page/q/periode dikirim ke backend) ====
+export const PER_PAGE = 10;
+export const list = $state({
+  section: '',
+  page: 1,
+  q: '',
+  periode: '',
+  rows: [] as Row[],
+  total: 0,
+  loading: false,
+});
+let listSeq = 0;
+
+export async function fetchList(sectionId: string, opts: { page?: number; q?: string; periode?: string } = {}) {
+  const seq = ++listSeq; // guard respons lambat menimpa yang baru
+  list.section = sectionId;
+  list.page = opts.page ?? 1;
+  list.q = opts.q ?? '';
+  list.periode = opts.periode ?? '';
+  list.loading = true;
+  try {
+    const p = new URLSearchParams({ page: String(list.page), perPage: String(PER_PAGE) });
+    if (list.q) p.set('q', list.q);
+    if (list.periode) p.set('periode', list.periode);
+    const j = await api(`/api/${SHEET[sectionId] ?? sectionId}?${p}`);
+    if (seq === listSeq && j.ok) {
+      list.rows = j.data ?? [];
+      list.total = Number(j.total ?? 0);
+    }
+  } catch {
+    /* offline */
+  } finally {
+    if (seq === listSeq) list.loading = false;
+  }
+}
+
+// tarik ulang halaman aktif setelah mutasi (tambah/edit/hapus); mundur 1 halaman kalau kosong
+export async function refetchList() {
+  if (!list.section) return;
+  await fetchList(list.section, { page: list.page, q: list.q, periode: list.periode });
+  if (!list.rows.length && list.page > 1) await fetchList(list.section, { page: list.page - 1, q: list.q, periode: list.periode });
+}
+
+// ambil satu baris penuh dari server (form edit & modal detail)
+export async function fetchRow(sectionId: string, id: string | number): Promise<Row | null> {
+  const j = await api(`/api/${SHEET[sectionId] ?? sectionId}/${id}`);
+  return j.ok ? (j.data as Row) : null;
+}
+
+// ==== statistik dashboard (agregasi GROUP BY di server, khusus admin) ====
+export const stats = $state({
+  loaded: false,
+  totals: {} as Record<string, number>,
+  atlitPerCabor: [] as { name: string; count: number }[],
+  pelatihPerCabor: [] as { name: string; count: number }[],
+  klubPerCabang: [] as { name: string; count: number }[],
+  atlitProyeksi: [] as { name: string; count: number }[],
+  medaliTotal: { t: { e: 0, p: 0, b: 0 }, h: { e: 0, p: 0, b: 0 } },
+  prestasiTingkat: { total: 0, rows: [] as { name: string; count: number }[] },
+});
+
+export async function fetchStats() {
+  const j = await api('/api/stats');
+  if (j.ok) {
+    Object.assign(stats, j.stats);
+    stats.loaded = true;
+  }
+}
+
 let toastTimer: ReturnType<typeof setTimeout> | undefined;
 export function notify(msg: string) {
   ui.toast = msg;
@@ -192,16 +261,20 @@ export async function refresh() {
 
 async function doRefresh() {
   try {
-    // login → data lengkap (RBAC by token); tamu → ringkasan publik (landing)
-    const path = auth.user ? '/api/sheets/all' : '/api/public/summary';
-    const j = await api(path);
-    if (j.ok) {
-      const data = j.data as Record<string, Row[]>;
-      db.sections.forEach((s) => {
-        const rows = data[SHEET[s.id] ?? s.id] ?? [];
-        s.rows = rows;
-      });
-      syncLabels();
+    if (auth.user) {
+      // login → statistik dashboard; daftar list diambil per-halaman saat dibuka
+      await fetchStats();
+    } else {
+      // tamu → ringkasan publik (landing)
+      const j = await api('/api/public/summary');
+      if (j.ok) {
+        const data = j.data as Record<string, Row[]>;
+        db.sections.forEach((s) => {
+          const rows = data[SHEET[s.id] ?? s.id] ?? [];
+          s.rows = rows;
+        });
+        syncLabels();
+      }
     }
   } catch {
     /* offline: biarkan data lokal */
@@ -214,7 +287,8 @@ export async function addRow(sectionId: string, row: Row) {
   const r = await api(`/api/${SHEET[sectionId] ?? sectionId}`, { method: 'POST', body: JSON.stringify(row) });
   if (r.ok) {
     notify('Data berhasil ditambahkan');
-    await refresh();
+    await refetchList();
+    fetchStats();
   }
   return r;
 }
@@ -223,7 +297,8 @@ export async function updateRow(sectionId: string, id: string, data: Row) {
   const r = await api(`/api/${SHEET[sectionId] ?? sectionId}/${id}`, { method: 'PATCH', body: JSON.stringify(data) });
   if (r.ok) {
     notify('Data berhasil diperbarui');
-    await refresh();
+    await refetchList();
+    fetchStats();
   }
   return r;
 }
@@ -232,7 +307,8 @@ export async function deleteRow(sectionId: string, id: string) {
   const r = await api(`/api/${SHEET[sectionId] ?? sectionId}/${id}`, { method: 'DELETE' });
   if (r.ok) {
     notify('Data berhasil dihapus');
-    await refresh();
+    await refetchList();
+    fetchStats();
   }
   return r;
 }
