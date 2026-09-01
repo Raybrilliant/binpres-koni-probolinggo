@@ -30,7 +30,7 @@
   let files = $state<{ kk: string; akte: string; ktp: string }>({ kk: '', akte: '', ktp: '' });
 
   let pelatih = $state({ nama: '', alamat: '', jenisKelamin: 'Laki-laki', lisensi: '', fileLisensi: '', foto: '', cabor: '' });
-  let jadwal = $state({ tempat: '', cabor: '', hariMulai: 'Senin', hariSelesai: 'Senin', jamMulai: '', jamSelesai: '' });
+  let jadwal = $state({ tempat: '', cabor: '', hari: ['Senin'] as string[], jamMulai: '', jamSelesai: '' });
   let medali = $state({ cabor: '', periode: '', targetEmas: 0, targetPerak: 0, targetPerunggu: 0, hasilEmas: 0, hasilPerak: 0, hasilPerunggu: 0 });
   let pengurus = $state({ nama: '', jabatan: '', bio: '', foto: '' });
   let generic: Row = $state({ cabor: 'Semua', role: 'Operator', username: '' });
@@ -38,6 +38,14 @@
   let saveError = $state('');
 
   const HARI = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+
+  // pilih/batal hari latihan; urutan selalu Senin..Minggu
+  function toggleHari(h: string) {
+    const i = jadwal.hari.indexOf(h);
+    if (i === -1) jadwal.hari.push(h);
+    else jadwal.hari.splice(i, 1);
+    jadwal.hari.sort((a, b) => HARI.indexOf(a) - HARI.indexOf(b));
+  }
 
   async function submit(e: SubmitEvent) {
     e.preventDefault();
@@ -54,6 +62,7 @@
       if (idx !== -1) missing.push(`Piagam prestasi #${idx + 1}`);
     }
     if (section === 'pelatih' && !pelatih.fileLisensi) missing.push('File Lisensi');
+    if (section === 'jadwal' && !jadwal.hari.length) missing.push('Hari Latihan (minimal 1 hari)');
     if (missing.length) {
       saveError = 'Wajib unggah: ' + missing.join(', ');
       busy = false;
@@ -92,11 +101,10 @@
       return o;
     }
     if (section === 'jadwal') {
-      // kolom sheet tetap 'hari' & 'jam', diisi gabungan rentang: "Senin - Sabtu", "16:00 - 18:00"
-      const hari = jadwal.hariSelesai && jadwal.hariSelesai !== jadwal.hariMulai ? `${jadwal.hariMulai} - ${jadwal.hariSelesai}` : jadwal.hariMulai;
+      // kolom sheet tetap 'hari' & 'jam': hari digabung koma "Senin, Rabu, Jumat", jam rentang "16:00 - 18:00"
       const jam = jadwal.jamSelesai ? `${jadwal.jamMulai} - ${jadwal.jamSelesai}` : jadwal.jamMulai;
       const cabor = opCabor || jadwal.cabor;
-      return { tempat: jadwal.tempat, cabor, hari, jam };
+      return { tempat: jadwal.tempat, cabor, hari: jadwal.hari.join(', '), jam };
     }
     if (section === 'medali') {
       const num = (v: unknown) => Number(v) || 0;
@@ -148,9 +156,15 @@
     } else if (section === 'pelatih') {
       Object.assign(pelatih, { nama: row.nama ?? '', alamat: row.alamat ?? '', jenisKelamin: row.jenisKelamin ?? 'Laki-laki', lisensi: row.lisensi ?? '', fileLisensi: row.fileLisensi ?? '', foto: String(row.foto ?? ''), cabor: String(row.cabor ?? '') });
     } else if (section === 'jadwal') {
-      const [hariMulai = 'Senin', hariSelesai = ''] = String(row.hari ?? 'Senin').split(' - ');
+      // format baru: "Senin, Rabu, Jumat" — data lama rentang "Senin - Sabtu" diperluas ke daftar hari
+      const hariList = String(row.hari ?? 'Senin').split(',').map((s) => s.trim()).filter(Boolean);
+      if (hariList.length === 1 && hariList[0].includes(' - ')) {
+        const [a, b] = hariList[0].split(' - ').map((s) => s.trim());
+        const iA = HARI.indexOf(a), iB = HARI.indexOf(b);
+        if (iA !== -1 && iB !== -1) hariList.splice(0, 1, ...HARI.slice(Math.min(iA, iB), Math.max(iA, iB) + 1));
+      }
       const [jamMulai = '', jamSelesai = ''] = String(row.jam ?? '').split(' - ');
-      Object.assign(jadwal, { tempat: row.tempat ?? '', cabor: String(row.cabor ?? ''), hariMulai, hariSelesai: hariSelesai || hariMulai, jamMulai, jamSelesai });
+      Object.assign(jadwal, { tempat: row.tempat ?? '', cabor: String(row.cabor ?? ''), hari: hariList.length ? hariList : ['Senin'], jamMulai, jamSelesai });
     } else if (section === 'medali') {
       Object.assign(medali, {
         cabor: String(row.cabor ?? ''),
@@ -299,15 +313,13 @@
         {:else}
           <CaborCombobox bind:value={jadwal.cabor} pinned={null} allowCustom />
         {/if}</label>
-      <div class="form-field grid gap-3 sm:grid-cols-2">
-        <label class="text-sm"><span class="mb-1 block font-medium text-gray-600">Hari Mulai *</span>
-          <select required bind:value={jadwal.hariMulai} class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 outline-none focus:border-blue-400">
-            {#each HARI as h (h)}<option value={h}>{h}</option>{/each}
-          </select></label>
-        <label class="text-sm"><span class="mb-1 block font-medium text-gray-600">Hari Selesai *</span>
-          <select required bind:value={jadwal.hariSelesai} class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 outline-none focus:border-blue-400">
-            {#each HARI as h (h)}<option value={h}>{h}</option>{/each}
-          </select></label>
+      <div class="form-field">
+        <span class="mb-1.5 block text-sm font-medium text-gray-600">Hari Latihan * <span class="font-normal text-gray-400">(klik untuk memilih, bisa lebih dari satu)</span></span>
+        <div class="flex flex-wrap gap-2">
+          {#each HARI as h (h)}
+            <button type="button" aria-pressed={jadwal.hari.includes(h)} class="rounded-lg border px-3.5 py-2 text-xs font-semibold transition {jadwal.hari.includes(h) ? 'border-blue-600 bg-blue-600 text-white shadow-sm' : 'border-gray-200 bg-white text-gray-600 hover:border-blue-300 hover:text-blue-600'}" onclick={() => toggleHari(h)}>{h}</button>
+          {/each}
+        </div>
       </div>
       <div class="form-field grid gap-3 sm:grid-cols-2">
         <label class="text-sm"><span class="mb-1 block font-medium text-gray-600">Jam Mulai *</span>
