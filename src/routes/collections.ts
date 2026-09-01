@@ -1,5 +1,5 @@
 import { Elysia, t } from 'elysia';
-import { eq, sql } from 'drizzle-orm';
+import { and, asc, eq, ilike, or, sql } from 'drizzle-orm';
 import { db } from '../db';
 import { atlit, jadwalLatihan, klub, medali, pelatih, pengurus, prestasi, users } from '../db/schema';
 import { removeUploads } from '../lib/files';
@@ -111,6 +111,17 @@ const BODY_SCHEMA: Record<string, any> = {
   }),
 };
 
+// field yang dicari saat ?q= (ILIKE — ponytail: full scan; tambah index pg_trgm GIN kalau data tembus 100rb+ baris)
+const SEARCH: Record<string, string[]> = {
+  atlit: ['nama', 'tempatLahir', 'jenisKelamin', 'alamat', 'cabor', 'proyeksiPorprov'],
+  pelatih: ['nama', 'alamat', 'jenisKelamin', 'lisensi', 'cabor'],
+  jadwal_latihan: ['tempat', 'cabor', 'hari', 'jam'],
+  klub: ['nama', 'cabang', 'alamat'],
+  medali: ['cabor', 'periode'],
+  users: ['nama', 'username', 'cabor', 'role'],
+  pengurus: ['nama', 'jabatan', 'bio'],
+};
+
 export const collectionRoutes = new Elysia({ name: 'collections' }).use(authPlugin);
 
 for (const [name, table] of Object.entries(TABLES)) {
@@ -126,19 +137,61 @@ for (const [name, table] of Object.entries(TABLES)) {
 
   collectionRoutes.get(
     `/api/${name}`,
-    async function list({ user, isAdmin }) {
-      let rows: any[] = await db.select().from(table);
-      if (owned && !isAdmin) rows = rows.filter((r) => r.createdBy === user!.username);
-      if (name === 'users') rows = rows.map(({ passwordHash: _p, algo: _a, ...rest }) => rest);
-      if (name === 'atlit') {
-        const all = await db.select().from(prestasi);
-        const by = new Map<string, unknown[]>();
-        for (const p of all) (by.get(p.atlitId) ?? by.set(p.atlitId, []).get(p.atlitId)!).push(p);
-        rows = rows.map((r) => ({ ...r, prestasi: by.get(r.id) ?? [] }));
+    async function list({ user, isAdmin, query }) {
+      const page = Math.max(1, Number(query.page ?? 1) || 1);
+      const perPage = Math.min(100, Math.max(1, Number(query.perPage ?? 10) || 10));
+      const conds: any[] = [];
+      // RBAC di SQL (bukan post-filter) agar LIMIT/OFFSET tetap benar
+      if (owned && !isAdmin) conds.push(eq(table.createdBy, user!.username));
+      if (name === 'medali' && query.periode) conds.push(eq(table.periode, query.periode));
+      if (query.q) {
+        const like = `%${query.q}%`;
+        conds.push(or(...SEARCH[name].map((c) => ilike(table[c], like))));
       }
-      return { ok: true, data: rows };
+      const where = conds.length ? and(...conds) : undefined;
+      let rows: any[] = await db
+        .select()
+        .from(table)
+        .where(where)
+        .orderBy(asc(table.id))
+        .limit(perPage)
+        .offset((page - 1) * perPage);
+      if (name === 'users') rows = rows.map(({ passwordHash: _p, algo: _a, ...rest }) => rest);
+      const [cnt] = await db.select({ n: sql<number>`count(*)::int` }).from(table).where(where);
+      return { ok: true, data: rows, total: Number(cnt?.n ?? 0) };
     },
-    { beforeHandle: guards, detail: { ...detail, description: `Daftar semua ${name}. ${detail.description}` } },
+    {
+      beforeHandle: guards,
+      query: t.Object({
+        page: t.Optional(t.Numeric()),
+        perPage: t.Optional(t.Numeric()),
+        q: t.Optional(t.String({ maxLength: 100 })),
+        periode: t.Optional(t.String({ maxLength: 30 })),
+      }),
+      detail: {
+        ...detail,
+        description: `Daftar ${name} terpaginasi (server-side). Query: page, perPage (maks 100), q (pencarian), periode (khusus medali). Balasan { data, total }.`,
+      },
+    },
+  );
+
+  // detail satu baris — dipakai form edit & modal detail atlit (yang butuh daftar prestasi)
+  collectionRoutes.get(
+    `/api/${name}/:id`,
+    async function one({ params, user, isAdmin, set }) {
+      const row = (await db.select().from(table).where(eq(table.id, Number(params.id))).limit(1))[0];
+      if (!row || (owned && !isAdmin && row.createdBy !== user!.username)) {
+        set.status = 404;
+        return { ok: false, error: 'Data tidak ditemukan' };
+      }
+      if (name === 'atlit') row.prestasi = await db.select().from(prestasi).where(eq(prestasi.atlitId, row.id));
+      if (name === 'users') {
+        const { passwordHash: _p, algo: _a, ...rest } = row as any;
+        return { ok: true, data: rest };
+      }
+      return { ok: true, data: row };
+    },
+    { beforeHandle: guards, detail: { ...detail, description: `Detail satu ${name} berdasarkan id.` } },
   );
 
   collectionRoutes.post(

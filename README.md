@@ -34,9 +34,12 @@ dipakai sama sekali — backend ini satu-satunya sumber data.
 | POST | `/api/auth/login` | Login → `{ token, user }` |
 | GET | `/api/auth/me` | Profil dari token |
 | GET | `/api/public/summary` | Publik: jumlah atlit/pelatih/klub + pengurus (landing) |
-| GET | `/api/sheets/all` | Semua data (login; operator terbatas ke datanya) |
-| GET/POST | `/api/{atlit\|pelatih\|jadwal_latihan\|klub\|users\|pengurus}` | List & tambah |
+| GET | `/api/sheets/all` | Semua data sekaligus (login; operator terbatas ke datanya) — tidak dipakai frontend lagi |
+| GET | `/api/{koleksi}?page&perPage&q&periode` | List **terpaginasi server-side** → `{ data, total }` (perPage maks 100; `q` pencarian ILIKE; `periode` khusus medali) |
+| GET | `/api/{koleksi}/:id` | Detail satu baris (atlit menyertakan `prestasi[]`) |
+| POST | `/api/{koleksi}` | Tambah |
 | PATCH/DELETE | `/api/{koleksi}/:id` | Ubah & hapus |
+| GET | `/api/stats` | Agregasi statistik dashboard (GROUP BY di SQL, khusus admin) |
 | POST | `/api/upload` | Unggah gambar/PDF **maks 3MB** → `{ url }` (gambar dikonversi WebP) |
 | GET | `/uploads/:file` | Berkas yang sudah diunggah |
 | GET | `/swagger` | Dokumentasi OpenAPI interaktif |
