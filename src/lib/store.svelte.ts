@@ -261,21 +261,24 @@ export async function refresh() {
 
 async function doRefresh() {
   try {
-    if (auth.user) {
-      // login → statistik dashboard; daftar list diambil per-halaman saat dibuka
-      await fetchStats();
-    } else {
-      // tamu → ringkasan publik (landing)
-      const j = await api('/api/public/summary');
-      if (j.ok) {
-        const data = j.data as Record<string, Row[]>;
-        db.sections.forEach((s) => {
-          const rows = data[SHEET[s.id] ?? s.id] ?? [];
-          s.rows = rows;
-        });
-        syncLabels();
-      }
-    }
+    const jobs: Promise<void>[] = [];
+    // ringkasan publik selalu dibutuhkan — landing page memakainya walau user masih login
+    jobs.push(
+      (async () => {
+        const j = await api('/api/public/summary');
+        if (j.ok) {
+          const data = j.data as Record<string, Row[]>;
+          db.sections.forEach((s) => {
+            const rows = data[SHEET[s.id] ?? s.id] ?? [];
+            s.rows = rows;
+          });
+          syncLabels();
+        }
+      })(),
+    );
+    // login → tambah agregasi statistik dashboard
+    if (auth.user) jobs.push(fetchStats());
+    await Promise.all(jobs);
   } catch {
     /* offline: biarkan data lokal */
   } finally {
