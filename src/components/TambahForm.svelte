@@ -44,6 +44,21 @@
     if (!active || busy) return;
     busy = true;
     saveError = '';
+    // validasi manual berkas wajib — input file tidak bisa pakai required native
+    // karena nilainya URL hasil upload, bukan File (browser cek input.files)
+    const missing: string[] = [];
+    if (section === 'atlit') {
+      if (!files.kk) missing.push('Kartu Keluarga (KK)');
+      if (!files.akte) missing.push('Akte Kelahiran');
+      const idx = prestasi.findIndex((p) => !p.piagam);
+      if (idx !== -1) missing.push(`Piagam prestasi #${idx + 1}`);
+    }
+    if (section === 'pelatih' && !pelatih.fileLisensi) missing.push('File Lisensi');
+    if (missing.length) {
+      saveError = 'Wajib unggah: ' + missing.join(', ');
+      busy = false;
+      return;
+    }
     try {
       let r: { ok: boolean; error?: string };
       if (isEdit) {
@@ -229,7 +244,7 @@
                 {#each TINGKAT as t (t)}<option value={t}>{t}</option>{/each}
               </select></label>
             <label class="text-sm sm:col-span-3"><span class="mb-1 block font-medium text-gray-600">Piagam * <span class="font-normal text-gray-400">(gambar/PDF, maks 3MB)</span></span>
-              <UploadField bind:value={p.piagam} required /></label>
+              <UploadField bind:value={p.piagam} /></label>
           </div>
           {#if prestasi.length > 1}
             <button type="button" class="self-start rounded-lg bg-blue-100 px-3 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-200" onclick={() => prestasi.splice(i, 1)}>🗑️</button>
@@ -241,9 +256,9 @@
       <p class="mt-2 text-xs font-semibold uppercase tracking-widest text-blue-500">Dokumen (unggah gambar/PDF, maks 3MB)</p>
       <div class="grid gap-4 sm:grid-cols-3">
         <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">Kartu Keluarga (KK) *</span>
-          <UploadField bind:value={files.kk} required={!isEdit || !files.kk} /></label>
+          <UploadField bind:value={files.kk} /></label>
         <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">Akte Kelahiran *</span>
-          <UploadField bind:value={files.akte} required={!isEdit || !files.akte} /></label>
+          <UploadField bind:value={files.akte} /></label>
         <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">KTP <span class="font-normal text-gray-400">(jika sudah punya)</span></span>
           <UploadField bind:value={files.ktp} /></label>
       </div>
@@ -268,7 +283,7 @@
           <CaborCombobox bind:value={pelatih.cabor} pinned={null} allowCustom />
         {/if}</label>
       <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">Lisensi Pelatih * <span class="font-normal text-gray-400">(gambar/PDF, maks 3MB)</span></span>
-        <UploadField bind:value={pelatih.fileLisensi} required /></label>
+        <UploadField bind:value={pelatih.fileLisensi} /></label>
 
     {:else if section === 'jadwal'}
       <label class="form-field text-sm"><span class="mb-1 block font-medium text-gray-600">Tempat Latihan *</span>

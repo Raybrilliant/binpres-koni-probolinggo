@@ -5,12 +5,10 @@
 	// value = URL berkas hasil upload (/uploads/xxx) — atau link lama dari data lama
 	let {
 		value = $bindable(''),
-		required = false,
 		accept = 'image/jpeg,image/png,image/webp,application/pdf',
 		placeholder = 'Pilih berkas (gambar/PDF, maks 3MB)',
 	}: {
 		value?: string;
-		required?: boolean;
 		accept?: string;
 		placeholder?: string;
 	} = $props();
@@ -61,7 +59,6 @@
 		bind:this={inputEl}
 		type="file"
 		{accept}
-		{required}
 		disabled={busy}
 		title={placeholder}
 		class="w-full cursor-pointer rounded-xl border border-gray-200 bg-white text-xs text-gray-500 outline-none transition file:mr-3 file:cursor-pointer file:rounded-l-xl file:border-0 file:bg-blue-50 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-blue-600 hover:border-blue-300 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
