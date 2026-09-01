@@ -30,6 +30,13 @@
     }))
   );
 
+  // ketua KONI: statis di atas pengurus binpres (foto: taruh di public/ketua-koni.jpg)
+  const ketua = {
+    nama: 'Ir. H. ZULFIKAR IMAWAN',
+    jabatan: 'Ketua KONI Kota Probolinggo · Periode 2025-2029',
+    foto: '/ketua-koni.jpg',
+  };
+
   // narasi bidang pembinaan prestasi (4 fokus utama)
   const narasi = [
     { img: '/vector/1.webp', title: 'Penguatan Prestasi Atlit', desc: 'Membangun kebanggaan publik melalui pencapaian prestasi atlet di kancah provinsi, nasional, hingga internasional.' },
@@ -300,6 +307,23 @@
         <span class="text-xs font-bold uppercase tracking-[0.25em] text-white/800">Struktur Organisasi</span>
         <h2 class="mt-2 text-3xl font-extrabold">Pengurus BINPRES KONI</h2>
         <p class="mx-auto mt-2 max-w-md text-sm text-gray-400">Klik kartu untuk melihat biodata pengurus</p>
+      </div>
+
+      <!-- Ketua KONI: di atas pengurus binpres -->
+      <div class="mb-4 flex justify-center lg:mb-8">
+        <div class="pengurus-card group relative h-105 w-full max-w-sm overflow-hidden rounded-3xl bg-blue-700 text-white shadow-xl ring-1 ring-blue-200">
+          <img
+            src={ketua.foto}
+            alt={ketua.nama}
+            class="absolute inset-x-0 top-0 h-72 w-full object-cover object-top transition-transform duration-500 group-hover:scale-105"
+            loading="lazy"
+            onerror={(e) => { e.currentTarget.onerror = null; e.currentTarget.src = photos[0]; }}
+          />
+          <div class="absolute inset-x-0 bottom-0 p-5">
+            <p class="text-base font-bold">{ketua.nama}</p>
+            <p class="mt-0.5 text-xs font-medium text-blue-100">{ketua.jabatan}</p>
+          </div>
+        </div>
       </div>
 
       {#if !ui.loaded}
