@@ -28,6 +28,7 @@ export const atlit = pgTable(
     kk: text('kk').notNull().default(''), // url /uploads/...
     akte: text('akte').notNull().default(''),
     ktp: text('ktp').notNull().default(''),
+    foto: text('foto').notNull().default(''), // foto profil setengah badan
     cabor: text('cabor').notNull().default(''),
     proyeksiPorprov: text('proyeksi_porprov').notNull().default('Tidak'),
     createdBy: text('created_by').notNull().default(''),
@@ -60,6 +61,7 @@ export const pelatih = pgTable(
     jenisKelamin: text('jenis_kelamin').notNull().default(''),
     lisensi: text('lisensi').notNull().default(''),
     fileLisensi: text('file_lisensi').notNull().default(''),
+    foto: text('foto').notNull().default(''), // foto profil setengah badan
     cabor: text('cabor').notNull().default(''),
     createdBy: text('created_by').notNull().default(''),
     createdAt: doublePrecision('created_at').notNull().$defaultFn(now),

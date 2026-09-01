@@ -16,8 +16,8 @@ const TABLES: Record<string, any> = {
   pengurus,
 };
 const FIELDS: Record<string, string[]> = {
-  atlit: ['nama', 'tempatLahir', 'tanggalLahir', 'jenisKelamin', 'alamat', 'kk', 'akte', 'ktp', 'cabor', 'proyeksiPorprov'],
-  pelatih: ['nama', 'alamat', 'jenisKelamin', 'lisensi', 'fileLisensi', 'cabor'],
+  atlit: ['nama', 'tempatLahir', 'tanggalLahir', 'jenisKelamin', 'alamat', 'kk', 'akte', 'ktp', 'foto', 'cabor', 'proyeksiPorprov'],
+  pelatih: ['nama', 'alamat', 'jenisKelamin', 'lisensi', 'fileLisensi', 'foto', 'cabor'],
   jadwal_latihan: ['tempat', 'hari', 'jam', 'cabor'],
   klub: ['nama', 'cabang', 'alamat'],
   medali: ['cabor', 'periode', 'targetEmas', 'targetPerak', 'targetPerunggu', 'hasilEmas', 'hasilPerak', 'hasilPerunggu'],
@@ -32,8 +32,8 @@ const NUMERIC = new Set(['targetEmas', 'targetPerak', 'targetPerunggu', 'hasilEm
 const ADMIN_ONLY = new Set(['users', 'pengurus']);
 // field yang menyimpan berkas upload — dihapus otomatis saat baris dihapus/diganti
 const DOC_FIELDS: Record<string, string[]> = {
-  atlit: ['kk', 'akte', 'ktp'],
-  pelatih: ['fileLisensi'],
+  atlit: ['kk', 'akte', 'ktp', 'foto'],
+  pelatih: ['fileLisensi', 'foto'],
   jadwal_latihan: [],
   klub: [],
   users: [],
@@ -53,6 +53,7 @@ const BODY_SCHEMA: Record<string, any> = {
     kk: url(),
     akte: url(),
     ktp: url(),
+    foto: url(),
     cabor: str(120),
     proyeksiPorprov: t.Optional(t.Union([t.Literal('Ya'), t.Literal('Tidak')])),
     prestasi: t.Optional(
@@ -73,6 +74,7 @@ const BODY_SCHEMA: Record<string, any> = {
     jenisKelamin: str(20),
     lisensi: str(150),
     fileLisensi: url(),
+    foto: url(),
     cabor: str(120),
   }),
   jadwal_latihan: t.Object({
