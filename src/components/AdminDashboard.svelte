@@ -317,7 +317,7 @@
       {/if}
     </nav>
 
-    <div class="mx-4 mb-5 rounded-xl bg-blue-900/40 p-3 text-[11px] text-blue-100">
+    <div class="mx-4 mb-3 rounded-xl bg-blue-900/40 p-3 text-[11px] text-blue-100">
       <p>{auth.user.nama} <span class="text-blue-200">({auth.user.cabor})</span></p>
       <button class="mt-2 w-full rounded-lg bg-white/10 py-1.5 font-semibold text-white transition hover:bg-white/20" onclick={() => logout()}>Logout</button>
     </div>
