@@ -51,6 +51,29 @@ export const uploadRoutes = new Elysia({ prefix: '/api' })
           /* konversi tak tersedia/gagal → simpan format asli */
         }
       }
+      // ponytail: PDF dikompres via ghostscript (/ebook = 150dpi); bila gs tak ada/gagal/hasil lebih besar → simpan PDF asli
+      if (ext === 'pdf') {
+        const compressed = `${base}-c.pdf`;
+        try {
+          const proc = Bun.spawn([
+            'gs', '-sDEVICE=pdfwrite', '-dCompatibilityLevel=1.4', '-dPDFSETTINGS=/ebook',
+            '-dNOPAUSE', '-dQUIET', '-dBATCH', `-sOutputFile=${ENV.UPLOAD_DIR}/${compressed}`,
+            `${ENV.UPLOAD_DIR}/${stored}`,
+          ]);
+          await proc.exited;
+          const orig = Bun.file(`${ENV.UPLOAD_DIR}/${stored}`);
+          const comp = Bun.file(`${ENV.UPLOAD_DIR}/${compressed}`);
+          if ((await comp.exists()) && comp.size > 0 && comp.size < orig.size) {
+            await unlink(`${ENV.UPLOAD_DIR}/${stored}`);
+            stored = compressed;
+            url = `/uploads/${compressed}`;
+          } else {
+            await unlink(`${ENV.UPLOAD_DIR}/${compressed}`).catch(() => {});
+          }
+        } catch {
+          await unlink(`${ENV.UPLOAD_DIR}/${compressed}`).catch(() => {});
+        }
+      }
       return { ok: true, url };
     },
     {
@@ -59,7 +82,7 @@ export const uploadRoutes = new Elysia({ prefix: '/api' })
       detail: {
         tags: ['Upload'],
         description:
-          'Unggah gambar (JPG/PNG/WebP) atau PDF maksimal 3MB. Balasan `{ url }` dipakai sebagai nilai field dokumen (kk/akte/ktp/piagam/lisensi/foto). Butuh login.',
+          'Unggah gambar (JPG/PNG/WebP, dikonversi WebP) atau PDF (dikompres) maksimal 3MB. Balasan `{ url }` dipakai sebagai nilai field dokumen (kk/akte/ktp/piagam/lisensi/foto). Butuh login.',
       },
     },
   )

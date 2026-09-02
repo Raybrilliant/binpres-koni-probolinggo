@@ -1,6 +1,9 @@
 FROM oven/bun:1
 WORKDIR /app
 
+# ghostscript utk kompresi PDF upload
+RUN apt-get update && apt-get install -y --no-install-recommends ghostscript && rm -rf /var/lib/apt/lists/*
+
 # layer cache: deps dulu
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile --production
