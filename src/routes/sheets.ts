@@ -1,7 +1,7 @@
 import { Elysia } from 'elysia';
-import { eq, sql } from 'drizzle-orm';
+import { asc, eq, sql } from 'drizzle-orm';
 import { db } from '../db';
-import { atlit, jadwalLatihan, klub, medali, pengurus, pelatih, prestasi, users } from '../db/schema';
+import { atlit, cabor, jadwalLatihan, klub, medali, pengurus, pelatih, prestasi, users } from '../db/schema';
 import { adminGuard, authGuard, authPlugin } from '../plugins/auth';
 
 const stripUser = (u: Record<string, unknown>) => {
@@ -37,6 +37,14 @@ export const sheetRoutes = new Elysia({ prefix: '/api' })
       };
     },
     { detail: { tags: ['Public'], description: 'Ringkasan publik untuk landing page: jumlah atlit/pelatih/klub + daftar pengurus. Tanpa dokumen pribadi.' } },
+  )
+  .get(
+    '/public/cabor',
+    async () => {
+      const rows = await db.select({ nama: cabor.nama }).from(cabor).orderBy(asc(cabor.nama));
+      return { ok: true, data: rows.map((r) => r.nama) };
+    },
+    { detail: { tags: ['Public'], description: 'Daftar cabang olahraga (urut abjad, tanpa login). Dipakai combobox form & footer landing.' } },
   )
   .get(
     '/sheets/all',

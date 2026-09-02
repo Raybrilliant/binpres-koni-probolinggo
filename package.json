@@ -6,7 +6,8 @@
     "start": "bun run src/index.ts",
     "db:push": "bun --bun drizzle-kit push",
     "migrate:sqlite": "bun run scripts/migrate-sqlite-to-pg.ts",
-    "admin:create": "bun run scripts/create-admin.ts"
+    "admin:create": "bun run scripts/create-admin.ts",
+    "cabor:seed": "bun run scripts/seed-cabor.ts"
   },
   "dependencies": {
     "@elysiajs/cors": "latest",

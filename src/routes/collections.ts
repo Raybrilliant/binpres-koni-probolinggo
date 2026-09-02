@@ -1,7 +1,7 @@
 import { Elysia, t } from 'elysia';
 import { and, asc, eq, ilike, or, sql } from 'drizzle-orm';
 import { db } from '../db';
-import { atlit, jadwalLatihan, klub, medali, pelatih, pengurus, prestasi, users } from '../db/schema';
+import { atlit, cabor, jadwalLatihan, klub, medali, pelatih, pengurus, prestasi, users } from '../db/schema';
 import { removeUploads } from '../lib/files';
 import { adminGuard, authGuard, authPlugin } from '../plugins/auth';
 
@@ -14,6 +14,7 @@ const TABLES: Record<string, any> = {
   medali,
   users,
   pengurus,
+  cabor,
 };
 const FIELDS: Record<string, string[]> = {
   atlit: ['nama', 'tempatLahir', 'tanggalLahir', 'jenisKelamin', 'alamat', 'kk', 'akte', 'ktp', 'foto', 'cabor', 'proyeksiPorprov'],
@@ -23,13 +24,14 @@ const FIELDS: Record<string, string[]> = {
   medali: ['cabor', 'periode', 'targetEmas', 'targetPerak', 'targetPerunggu', 'hasilEmas', 'hasilPerak', 'hasilPerunggu'],
   users: ['nama', 'username', 'cabor', 'role'],
   pengurus: ['nama', 'jabatan', 'bio', 'foto'],
+  cabor: ['nama'],
 };
 // tabel dengan kepemilikan data (RBAC operator)
 const OWNED = new Set(['atlit', 'pelatih', 'jadwal_latihan', 'klub', 'medali']);
 // field numerik: string kosong dikonversi 0
 const NUMERIC = new Set(['targetEmas', 'targetPerak', 'targetPerunggu', 'hasilEmas', 'hasilPerak', 'hasilPerunggu']);
 // hanya admin yang boleh menyentuh
-const ADMIN_ONLY = new Set(['users', 'pengurus']);
+const ADMIN_ONLY = new Set(['users', 'pengurus', 'cabor']);
 // field yang menyimpan berkas upload — dihapus otomatis saat baris dihapus/diganti
 const DOC_FIELDS: Record<string, string[]> = {
   atlit: ['kk', 'akte', 'ktp', 'foto'],
@@ -111,6 +113,9 @@ const BODY_SCHEMA: Record<string, any> = {
     bio: t.Optional(t.String({ maxLength: 2000 })),
     foto: url(),
   }),
+  cabor: t.Object({
+    nama: t.String({ minLength: 1, maxLength: 120 }),
+  }),
 };
 
 // field yang dicari saat ?q= (ILIKE — ponytail: full scan; tambah index pg_trgm GIN kalau data tembus 100rb+ baris)
@@ -122,6 +127,7 @@ const SEARCH: Record<string, string[]> = {
   medali: ['cabor', 'periode'],
   users: ['nama', 'username', 'cabor', 'role'],
   pengurus: ['nama', 'jabatan', 'bio'],
+  cabor: ['nama'],
 };
 
 export const collectionRoutes = new Elysia({ name: 'collections' }).use(authPlugin);

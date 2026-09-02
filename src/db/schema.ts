@@ -1,4 +1,5 @@
 import { doublePrecision, index, integer, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 
 const now = () => Date.now();
 
@@ -122,3 +123,14 @@ export const pengurus = pgTable('pengurus', {
   foto: text('foto').notNull().default(''),
   createdAt: doublePrecision('created_at').notNull().$defaultFn(now),
 });
+
+export const cabor = pgTable(
+  'cabor',
+  {
+    id: integer('id').primaryKey().generatedByDefaultAsIdentity(),
+    nama: text('nama').notNull(),
+    createdAt: doublePrecision('created_at').notNull().$defaultFn(now),
+  },
+  // unik case-insensitive: "Sepak Bola" dan "SEPAK BOLA" dianggap sama
+  (t) => [uniqueIndex('cabor_nama_uq').on(sql`lower(${t.nama})`)],
+);

@@ -34,6 +34,7 @@ dipakai sama sekali — backend ini satu-satunya sumber data.
 | POST | `/api/auth/login` | Login → `{ token, user }` |
 | GET | `/api/auth/me` | Profil dari token |
 | GET | `/api/public/summary` | Publik: jumlah atlit/pelatih/klub + pengurus (landing) |
+| GET | `/api/public/cabor` | Publik: daftar cabang olahraga dari DB (combobox & footer landing) |
 | GET | `/api/sheets/all` | Semua data sekaligus (login; operator terbatas ke datanya) — tidak dipakai frontend lagi |
 | GET | `/api/{koleksi}?page&perPage&q&periode` | List **terpaginasi server-side** → `{ data, total }` (perPage maks 100; `q` pencarian ILIKE; `periode` khusus medali) |
 | GET | `/api/{koleksi}/:id` | Detail satu baris (atlit menyertakan `prestasi[]`) |
@@ -46,6 +47,7 @@ dipakai sama sekali — backend ini satu-satunya sumber data.
 
 Catatan:
 - `prestasi` tidak punya endpoint sendiri — dikelola lewat payload `prestasi[]` pada atlit (create/update sinkron delete+insert by `atlitId`, hapus atlit ikut menghapus prestasinya via FK cascade).
+- `cabor` (46 cabang, khusus admin) di-CRUD lewat koleksi generik; seed awal: `bun run cabor:seed` (idempotent). Nama unik case-insensitive — duplikat ditolak 409. Data lama yang memakai nama cabor yang dihapus tetap tersimpan (kolom teks, tanpa FK).
 - RBAC: admin (`cabor = Semua` / role selain Operator) melihat semuanya; operator hanya melihat & mengubah data yang ia buat (`createdBy`), dan cabor data yang ia buat dikunci ke cabor akunnya di sisi server.
 - Field dokumen (kk/akte/ktp/piagam/fileLisensi/foto) berisi URL hasil `/api/upload`, bukan lagi link Google Drive.
 - Menghapus data otomatis menghapus berkas terkait; mengganti dokumen menghapus berkas lamanya.

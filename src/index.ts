@@ -34,11 +34,7 @@ const app = new Elysia({ serve: { maxRequestBodySize: 8 * 1024 * 1024 } })
   .get('/api/health', () => ({ ok: true, service: 'binpres-backend', time: Date.now() }), {
     detail: { tags: ['Meta'] },
   })
-  .use(authRoutes)
-  .use(sheetRoutes)
-  .use(collectionRoutes)
-  .use(uploadRoutes)
-  .use(filesRoutes)
+  // onError harus terdaftar SEBELUM route/plugin agar berlaku ke semuanya
   .onError(function handler({ code, error, set }) {
     if (code === 'VALIDATION') {
       set.status = 422;
@@ -52,15 +48,22 @@ const app = new Elysia({ serve: { maxRequestBodySize: 8 * 1024 * 1024 } })
       set.status = 404;
       return { ok: false, error: 'Endpoint tidak ditemukan' };
     }
-    const msg = (error as Error)?.message ?? '';
-    if (msg.includes('UNIQUE constraint')) {
+    // drizzle membungkus error pg di .cause — cek keduanya
+    const msg = ((error as Error)?.message ?? '') + ' ' + ((error as any)?.cause?.message ?? '');
+    // unique violation: SQLite "UNIQUE constraint", Postgres "duplicate key ... unique constraint" (23505)
+    if (msg.includes('UNIQUE constraint') || msg.includes('duplicate key') || msg.includes('unique constraint')) {
       set.status = 409;
-      return { ok: false, error: 'Data sudah ada (username duplikat?)' };
+      return { ok: false, error: 'Data sudah ada (nama/username duplikat?)' };
     }
     console.error('[error]', error);
     set.status = 500;
     return { ok: false, error: 'Kesalahan server' };
   })
+  .use(authRoutes)
+  .use(sheetRoutes)
+  .use(collectionRoutes)
+  .use(uploadRoutes)
+  .use(filesRoutes)
   .listen(ENV.PORT);
 
 console.log(`🦊 BINPRES backend jalan di http://localhost:${app.server?.port}`);
