@@ -44,11 +44,11 @@
   let searchTimer: ReturnType<typeof setTimeout> | undefined;
 
   const isAdmin = $derived(!auth.user || auth.user.cabor === 'Semua');
-  const menuSections = $derived(isAdmin ? sections : sections.filter((s) => !['users', 'pengurus'].includes(s.id)));
+  const menuSections = $derived(isAdmin ? sections : sections.filter((s) => !['users', 'pengurus', 'cabor'].includes(s.id)));
 
   const active = $derived(sections.find((s) => s.id === view));
-  // non-admin: tolak akses ke section terlarang (dashboard/users/pengurus)
-  const allowedView = $derived(isAdmin || !['dashboard', 'users', 'pengurus'].includes(view));
+  // non-admin: tolak akses ke section terlarang (dashboard/users/pengurus/cabor)
+  const allowedView = $derived(isAdmin || !['dashboard', 'users', 'pengurus', 'cabor'].includes(view));
 
   const totalPages = $derived(Math.max(1, Math.ceil(list.total / PER_PAGE)));
 
@@ -295,7 +295,7 @@
 
       {#if openCabang}
         <div class="ml-4 flex flex-col gap-1 border-l border-blue-400/50 pl-3">
-          {#each menuSections.filter((s) => !['users', 'pengurus'].includes(s.id)) as s (s.id)}
+          {#each menuSections.filter((s) => !['users', 'pengurus', 'cabor'].includes(s.id)) as s (s.id)}
             <button
               class="sidebar-item flex items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] transition-colors {view === s.id ? 'bg-white font-semibold text-blue-600 shadow' : 'text-blue-100 hover:bg-blue-500/40'}"
               onclick={() => navigate(s.id)}>
@@ -307,7 +307,7 @@
 
       {#if isAdmin}
         <p class="sidebar-item mt-4 mb-1 px-3 text-[10px] font-semibold uppercase tracking-widest text-blue-200">Sistem</p>
-        {#each sections.filter((s) => ['users', 'pengurus'].includes(s.id)) as s (s.id)}
+        {#each sections.filter((s) => ['users', 'pengurus', 'cabor'].includes(s.id)) as s (s.id)}
           <button
             class="sidebar-item flex w-full items-center gap-3 rounded-xl px-3 py-2.5 transition-colors {view === s.id ? 'bg-white font-semibold text-blue-600 shadow-md' : 'hover:bg-blue-500/40'}"
             onclick={() => navigate(s.id)}>

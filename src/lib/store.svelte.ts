@@ -2,21 +2,9 @@ export type Row = Record<string, any>;
 export type Field = { key: string; label: string; type?: string; ph?: string };
 export type Section = { id: string; label: string; icon: string; fields: Field[]; rows: Row[] };
 
-// 46 cabang olahraga binaan KONI Kota Probolinggo (sesuai data resmi)
-export const CABOR: string[] = [
-  'AKUATIK (AI)', 'ANGGAR (IKASI)', 'ANGKAT BERAT (PABERSI)', 'ANGKAT BESI (PABSI)',
-  'ATLETIK (PASI)', 'BALAP SEPEDA (ISSI)', 'BERKUDA (PORDASI)', 'BERMOTOR (IMI)',
-  'BILIARD (POBSI)', 'BINARAGA (PBFI)', 'BOLA TANGAN (ABTI)',
-  'BOLA VOLI (PBVSI)', 'BRIDGE (GABSI)', 'BULU TANGKIS (PBSI)', 'CATUR (PERCASI)',
-  'DANCESPORT (IODI)', 'DAYUNG (PODSI)', 'DOMINO (ORADO)', 'DRUMBAND (PDBI)',
-  'FUTSAL (AFI)', 'HAPKIDO (HI)', 'KARATE (FORKI)', 'KURASH (FERKUSHI)',
-  'MENEMBAK (PERBAKIN)', 'MUATHAY (MI)', 'PANAHAN (PERPANI)', 'PANJAT TEBING (FPTI)',
-  'PENCAK SILAT (IPSI)', 'PETANQUE (FOPI)', 'SELAM (POSSI)', 'SENAM (PERSANI)',
-  'SEPAK BOLA (PSSI)', 'SEPAK TAKRAW (PSTI)', 'SEPATU RODA (PERSEROSI)', 'SKY AIR (PSAWI)',
-  'TAE KWON DO (TI)', 'TARUNG DRAJAT (KODRAT)', 'TENIS (PELTI)', 'TENIS MEJA (PTMSI)',
-  'TINJU (PERTINA)', 'TRIATHLON (FTI)', 'WUSHU (WI)', 'ARUNG JERAM (FAJI)',
-  'GATEBALL (PERGATSI)', 'IBCA MMA', 'PARAMOTOR (FASI)',
-] as const;
+// 46 cabang olahraga — sumber kebenaran kini di database (tabel `cabor`),
+// dimuat via /api/public/cabor saat init. Bisa di-CRUD admin lewat menu Manajemen Cabor.
+export const CABOR: string[] = $state([]);
 
 // periode PORPROV (2 tahunan) mulai 2027: 2027, 2029, 2031, ...
 export const PERIODE: string[] = Array.from({ length: 9 }, (_, i) => String(2027 + i * 2));
@@ -34,6 +22,7 @@ const SHEET: Record<string, string> = {
   medali: 'medali',
   users: 'users',
   pengurus: 'pengurus',
+  cabor: 'cabor',
 };
 
 let token: string | null = null;
@@ -140,6 +129,13 @@ function seed(): Section[] {
         { key: 'nama', label: 'Nama' },
         { key: 'jabatan', label: 'Jabatan' },
       ],
+      rows: [],
+    },
+    {
+      id: 'cabor',
+      label: 'Manajemen Cabor',
+      icon: '🏆',
+      fields: [{ key: 'nama', label: 'Nama Cabang Olahraga' }],
       rows: [],
     },
     {
@@ -390,4 +386,20 @@ export function syncLabels() {
 }
 syncLabels();
 
-if (typeof window !== 'undefined') refresh();
+// muat daftar cabor dari database (publik — dipakai combobox & footer landing)
+export async function fetchCabor() {
+  try {
+    const j = await api('/api/public/cabor');
+    if (j.ok && Array.isArray(j.data)) {
+      CABOR.length = 0;
+      CABOR.push(...j.data);
+    }
+  } catch {
+    /* offline */
+  }
+}
+
+if (typeof window !== 'undefined') {
+  refresh();
+  fetchCabor();
+}
