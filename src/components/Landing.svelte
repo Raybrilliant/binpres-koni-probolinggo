@@ -398,7 +398,7 @@
     </div>
 
     <div class="relative border-t border-white/15 py-5 text-center text-[11px] text-blue-200">
-      © 2026 BINPRES KONI Kota Probolinggo · made with <span class=" animate-pulse">❤️</span> by <a href="https://raybrilliant.my.id" class="italic text-amber-200">raybrilliant</a>
+      © 2026 BINPRES KONI Kota Probolinggo
     </div>
   </footer>
 </div>
