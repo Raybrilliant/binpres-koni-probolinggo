@@ -17,6 +17,13 @@ export default defineConfig({
     mode: 'standalone',
   }),
 
+  server: {
+    // WAJIB utk Docker/Dokploy: default `false` = bind localhost sehingga
+    // reverse proxy tidak bisa menjangkau → 502. `true` = bind 0.0.0.0.
+    // Masih bisa dioverride lewat env HOST saat runtime.
+    host: true,
+  },
+
   vite: {
     plugins: [tailwindcss()],
     server: {
