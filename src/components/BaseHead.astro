@@ -1,0 +1,73 @@
+---
+// Head bersama untuk semua halaman: metadata dasar, canonical,
+// Open Graph, Twitter Card, dan font. Halaman spesifik menambahkan
+// tag ekstra setelah komponen ini.
+import { SITE, absoluteUrl } from "../lib/site";
+
+interface Props {
+  title: string;
+  description?: string;
+  /** Path halaman, cth "/" atau "/admin" */
+  path: string;
+  ogImage?: string;
+  /** true untuk halaman yang tidak boleh diindeks (cth: /admin) */
+  noindex?: boolean;
+}
+
+const {
+  title,
+  description = SITE.description,
+  path,
+  ogImage = SITE.ogImage,
+  noindex = false,
+} = Astro.props;
+
+const canonical = absoluteUrl(path);
+const ogImageUrl = absoluteUrl(ogImage);
+const robots = noindex
+  ? "noindex, nofollow"
+  : "index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1";
+---
+
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="generator" content={Astro.generator} />
+<title>{title}</title>
+<meta name="description" content={description} />
+<meta name="robots" content={robots} />
+<link rel="canonical" href={canonical} />
+<link rel="icon" type="image/png" href="/logo.png" />
+<link rel="sitemap" href="/sitemap.xml" />
+<meta name="theme-color" content="#1d4ed8" />
+
+<meta property="og:type" content="website" />
+<meta property="og:site_name" content={SITE.name} />
+<meta property="og:locale" content={SITE.locale} />
+<meta property="og:title" content={title} />
+<meta property="og:description" content={description} />
+<meta property="og:url" content={canonical} />
+<meta property="og:image" content={ogImageUrl} />
+<meta property="og:image:alt" content={SITE.name} />
+
+<meta name="twitter:card" content="summary_large_image" />
+<meta name="twitter:title" content={title} />
+<meta name="twitter:description" content={description} />
+<meta name="twitter:image" content={ogImageUrl} />
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+    href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap"
+    rel="stylesheet"
+/>
+<style is:global>
+    @theme {
+        --font-poppins: "Poppins", ui-sans-serif, system-ui, sans-serif;
+    }
+    body {
+        font-family: "Poppins", ui-sans-serif, system-ui, sans-serif;
+    }
+    html {
+        scroll-behavior: smooth;
+    }
+</style>

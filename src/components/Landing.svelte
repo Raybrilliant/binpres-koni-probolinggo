@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { CABOR, db, ui, refresh } from '../lib/store.svelte';
+  import { CABOR, db, ui, refresh, seedFromServer } from '../lib/store.svelte';
   import gsap from 'gsap';
   import { ScrollTrigger } from 'gsap/ScrollTrigger';
 
@@ -9,10 +9,19 @@
   let {
     heroImage,
     photos, // fallback foto untuk row tanpa URL foto
+    initialData, // hasil fetch SSR /api/public/summary — konten nyata di HTML awal
+    initialCabor, // hasil fetch SSR /api/public/cabor
+    faq, // pertanyaan umum (sumber sama dgn JSON-LD FAQPage)
   }: {
     heroImage: string;
     photos: string[];
+    initialData?: Record<string, any[]> | null;
+    initialCabor?: string[] | null;
+    faq: { q: string; a: string }[];
   } = $props();
+
+  // svelte-ignore state_referenced_locally -- sengaja: seed data SSR hanya sekali di init (props tidak berubah)
+  seedFromServer(initialData, initialCabor);
 
   let expanded = $state<number | 'ketua'>(-1);
 
@@ -184,6 +193,7 @@
 </script>
 
 <div class="min-h-screen overflow-x-clip bg-white font-poppins text-gray-800">
+  <main>
   <!-- ==== HERO ==== -->
   <section class="relative overflow-hidden bg-linear-to-br from-blue-700 via-blue-600 to-blue-800 text-white">
     <div class="ornament absolute -left-24 top-10 h-72 w-72 rounded-full bg-white/10"></div>
@@ -213,16 +223,16 @@
 
       <div class="hero-img-wrap relative mx-auto w-full max-w-md">
         <div class="overflow-hidden rounded-3xl shadow-2xl ring-4 ring-white/20">
-          <img src={heroImage} alt="BINPRES KONI Probolinggo" class="aspect-4/3 w-full object-cover" loading="eager" />
+          <img src={heroImage} alt="Kegiatan pembinaan prestasi atlet BINPRES KONI Kota Probolinggo" width="940" height="627" class="aspect-4/3 w-full object-cover" loading="eager" fetchpriority="high" />
         </div>
 
         <!-- 3 floating glass cards -->
         <div class="pointer-events-auto absolute -left-6 top-8 sm:-left-12">
-          <div data-tilt="t1" role="figure" aria-label="Statistik atlitr terdaftar" class="stat-card flex h-28 w-36 cursor-pointer flex-col justify-between rounded-2xl border border-white/30 p-4 shadow-2xl shadow-black/20 will-change-transform" onmousemove={bindTilt} onmouseleave={unbindTilt}>
+          <div data-tilt="t1" role="figure" aria-label="Statistik atlet terdaftar" class="stat-card flex h-28 w-36 cursor-pointer flex-col justify-between rounded-2xl border border-white/30 p-4 shadow-2xl shadow-black/20 will-change-transform" onmousemove={bindTilt} onmouseleave={unbindTilt}>
             <div class="shine absolute inset-0 rounded-2xl bg-linear-to-tr from-transparent via-white/25 to-transparent"></div>
             <span class="text-xl leading-none">🏃</span>
             <div>
-              <p class="stat-num text-2xl font-extrabold leading-none" data-target={stats.atlit}>0</p>
+              <p class="stat-num text-2xl font-extrabold leading-none" data-target={stats.atlit}>{stats.atlit}</p>
               <p class="mt-1 text-[11px] font-medium leading-tight text-white/90">Atlit Terdaftar</p>
             </div>
           </div>
@@ -232,7 +242,7 @@
             <div class="shine absolute inset-0 rounded-2xl bg-linear-to-tr from-transparent via-white/25 to-transparent"></div>
             <span class="text-xl leading-none">🎯</span>
             <div>
-              <p class="stat-num text-2xl font-extrabold leading-none" data-target={stats.pelatih}>0</p>
+              <p class="stat-num text-2xl font-extrabold leading-none" data-target={stats.pelatih}>{stats.pelatih}</p>
               <p class="mt-1 text-[11px] font-medium leading-tight text-white/90">Pelatih Terdaftar</p>
             </div>
           </div>
@@ -242,7 +252,7 @@
             <div class="shine absolute inset-0 rounded-2xl bg-linear-to-tr from-transparent via-white/25 to-transparent"></div>
             <span class="text-xl leading-none">🏟️</span>
             <div>
-              <p class="stat-num text-2xl font-extrabold leading-none" data-target={stats.klub}>0</p>
+              <p class="stat-num text-2xl font-extrabold leading-none" data-target={stats.klub}>{stats.klub}</p>
               <p class="mt-1 text-[11px] font-medium leading-tight text-white/90">Perguruan Terdaftar</p>
             </div>
           </div>
@@ -283,6 +293,25 @@
               <h3 class="text-base font-bold leading-snug">{n.title}</h3>
               <p class="mt-1.5 text-[13px] leading-relaxed text-gray-500">{n.desc}</p>
             </div>
+          </div>
+        {/each}
+      </div>
+    </div>
+  </section>
+
+  <!-- ==== FAQ ==== -->
+  <section id="faq" class="relative overflow-hidden py-20">
+    <div class="relative mx-auto max-w-3xl px-6">
+      <div class="mb-10 text-center">
+        <span class="text-xs font-bold uppercase tracking-[0.25em] text-blue-600">FAQ</span>
+        <h2 class="mt-2 text-3xl font-extrabold">Pertanyaan Umum</h2>
+        <p class="mx-auto mt-3 max-w-md text-sm text-gray-500">Hal yang sering ditanyakan tentang program pembinaan BINPRES KONI Kota Probolinggo.</p>
+      </div>
+      <div class="grid gap-4">
+        {#each faq as f (f.q)}
+          <div class="rounded-3xl bg-blue-50/60 p-6 ring-1 ring-blue-100">
+            <h3 class="text-base font-bold text-gray-800">{f.q}</h3>
+            <p class="mt-2 text-[13px] leading-relaxed text-gray-600">{f.a}</p>
           </div>
         {/each}
       </div>
@@ -349,6 +378,7 @@
       {/if}
     </div>
   </section>
+  </main>
 
   <!-- ==== FOOTER ==== -->
   <footer class="relative overflow-hidden bg-linear-to-br from-blue-700 via-blue-600 to-blue-800 text-white">
@@ -375,6 +405,7 @@
           <li><a href="/" class="transition hover:text-white hover:underline">Beranda</a></li>
           <li><a href="#narasi" class="transition hover:text-white hover:underline">Narasi Binpres</a></li>
           <li><a href="#pengurus" class="transition hover:text-white hover:underline">Pengurus</a></li>
+          <li><a href="#faq" class="transition hover:text-white hover:underline">FAQ</a></li>
           <li><a href="/admin" class="transition hover:text-white hover:underline">Panel Admin</a></li>
         </ul>
       </div>

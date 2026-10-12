@@ -1,0 +1,29 @@
+---
+import BaseHead from "../components/BaseHead.astro";
+---
+
+<html lang="id">
+    <head>
+        <BaseHead
+            title="Halaman Tidak Ditemukan — BINPRES KONI Kota Probolinggo"
+            description="Halaman yang Anda cari tidak tersedia. Kembali ke beranda BINPRES KONI Kota Probolinggo."
+            path="/404"
+            noindex
+        />
+    </head>
+    <body class="bg-white antialiased">
+        <main class="flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
+            <p class="text-6xl font-extrabold text-blue-600">404</p>
+            <h1 class="text-xl font-bold text-gray-800">Halaman tidak ditemukan</h1>
+            <p class="max-w-md text-sm text-gray-500">
+                Halaman yang Anda cari mungkin telah dipindahkan atau tidak pernah ada.
+            </p>
+            <a
+                href="/"
+                class="mt-2 rounded-xl bg-blue-600 px-6 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-blue-700"
+            >
+                Kembali ke Beranda
+            </a>
+        </main>
+    </body>
+</html>

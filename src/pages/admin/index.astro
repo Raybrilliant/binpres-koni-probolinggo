@@ -1,13 +1,17 @@
 ---
 import AdminDashboard from "../../components/AdminDashboard.svelte";
+import BaseHead from "../../components/BaseHead.astro";
 import "../../styles/global.css";
 ---
 
 <html lang="id">
     <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <link rel="icon" type="image/png" href="/logo.png" />
+        <BaseHead
+            title="Panel Admin — BINPRES KONI Kota Probolinggo"
+            description="Panel admin data pembinaan prestasi BINPRES KONI Kota Probolinggo."
+            path="/admin"
+            noindex
+        />
         <style is:global>
             /* anti-flash: sesi aktif → halaman login disembunyikan sejak sebelum first paint */
             html[data-auth="in"] .login-view {
@@ -20,7 +24,6 @@ import "../../styles/global.css";
                     document.documentElement.dataset.auth = "in";
             } catch {}
         </script>
-        <title>Admin BINPRES KONI Kota Probolinggo</title>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
         <link
@@ -28,9 +31,6 @@ import "../../styles/global.css";
             rel="stylesheet"
         />
         <style is:global>
-            @theme {
-                --font-poppins: "Poppins", ui-sans-serif, system-ui, sans-serif;
-            }
             body {
                 font-family: "Poppins", ui-sans-serif, system-ui, sans-serif;
             }

@@ -1,38 +1,133 @@
 ---
 import Landing from "../components/Landing.svelte";
+import BaseHead from "../components/BaseHead.astro";
+import { SITE, absoluteUrl, API_SERVER, FAQ } from "../lib/site";
 import "../styles/global.css";
 
 // foto statis lokal (unduhan Pexels) — isi identik di development & production
 const heroImage = "/pexels/hero.jpg";
 const photos = [1, 2, 3, 4, 5, 6].map((i) => `/pexels/pengurus-${i}.jpg`);
+
+// SSR: tarik ringkasan data publik + daftar cabor saat request supaya konten
+// nyata (pengurus, statistik, cabor) ikut tercetak di HTML awal — terbaca
+// crawler & AI. Gagal backend → undefined, island tampil dengan skeleton.
+async function fetchPublic(path: string): Promise<any | undefined> {
+    try {
+        const res = await fetch(`${API_SERVER}${path}`, {
+            signal: AbortSignal.timeout(2500),
+        });
+        if (!res.ok) return undefined;
+        const j: any = await res.json();
+        return j.ok ? (j.data as any) : undefined;
+    } catch {
+        return undefined;
+    }
+}
+
+const [summary, cabor] = await Promise.all([
+    fetchPublic("/api/public/summary") as Promise<
+        Record<string, any[]> | undefined
+    >,
+    fetchPublic("/api/public/cabor") as Promise<string[] | undefined>,
+]);
+
+// daftar pengurus dari data SSR — dipakai ulang untuk JSON-LD ItemList
+const pengurus: { nama: string; jabatan: string }[] = (
+    summary?.pengurus ?? []
+).map((p: any) => ({
+    nama: String(p.nama ?? ""),
+    jabatan: String(p.jabatan ?? ""),
+}));
+
+const title = "BINPRES KONI Kota Probolinggo — Bina Prestasi Atlet Muda";
+
+// JSON-LD: entitas organisasi, situs, halaman, FAQ, dan pengurus
+const jsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+        {
+            "@type": "SportsOrganization",
+            "@id": `${SITE.url}/#organization`,
+            name: SITE.name,
+            alternateName: ["BINPRES KONI", "KONI Kota Probolinggo"],
+            url: `${SITE.url}/`,
+            logo: absoluteUrl(SITE.logo),
+            image: absoluteUrl(SITE.ogImage),
+            description: SITE.description,
+            telephone: SITE.telephone,
+            address: {
+                "@type": "PostalAddress",
+                streetAddress: SITE.address.street,
+                addressLocality: SITE.address.city,
+                addressRegion: SITE.address.region,
+                addressCountry: SITE.address.country,
+            },
+            areaServed: SITE.address.city,
+            foundingLocation: SITE.address.city,
+        },
+        {
+            "@type": "WebSite",
+            "@id": `${SITE.url}/#website`,
+            url: `${SITE.url}/`,
+            name: SITE.name,
+            inLanguage: "id-ID",
+            publisher: { "@id": `${SITE.url}/#organization` },
+        },
+        {
+            "@type": "WebPage",
+            "@id": `${SITE.url}/#webpage`,
+            url: `${SITE.url}/`,
+            name: title,
+            description: SITE.description,
+            inLanguage: "id-ID",
+            isPartOf: { "@id": `${SITE.url}/#website` },
+            about: { "@id": `${SITE.url}/#organization` },
+            primaryImageOfPage: absoluteUrl(SITE.ogImage),
+        },
+        ...(pengurus.length > 0
+            ? [
+                  {
+                      "@type": "ItemList",
+                      name: "Pengurus BINPRES KONI Kota Probolinggo",
+                      itemListElement: pengurus.map((p, i) => ({
+                          "@type": "ListItem",
+                          position: i + 1,
+                          item: {
+                              "@type": "Person",
+                              name: p.nama,
+                              jobTitle: p.jabatan,
+                              worksFor: { "@id": `${SITE.url}/#organization` },
+                          },
+                      })),
+                  },
+              ]
+            : []),
+        {
+            "@type": "FAQPage",
+            mainEntity: FAQ.map((f) => ({
+                "@type": "Question",
+                name: f.q,
+                acceptedAnswer: { "@type": "Answer", text: f.a },
+            })),
+        },
+    ],
+};
 ---
 
 <html lang="id">
     <head>
-        <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="generator" content={Astro.generator} />
-        <link rel="icon" type="image/png" href="/logo.png" />
-        <title>BINPRES KONI Kota Probolinggo — Bina Prestasi</title>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-        <link
-            href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800&display=swap"
-            rel="stylesheet"
-        />
-        <style is:global>
-            @theme {
-                --font-poppins: "Poppins", ui-sans-serif, system-ui, sans-serif;
-            }
-            body {
-                font-family: "Poppins", ui-sans-serif, system-ui, sans-serif;
-            }
-            html {
-                scroll-behavior: smooth;
-            }
-        </style>
+        <BaseHead {title} path="/" />
+        <link rel="preload" as="image" href={heroImage} fetchpriority="high" />
+        <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
     </head>
     <body class="bg-white antialiased">
-        <Landing client:load {heroImage} {photos} />
+        <Landing
+            client:load
+            {heroImage}
+            {photos}
+            initialData={summary}
+            initialCabor={cabor}
+            faq={FAQ}
+        />
     </body>
 </html>

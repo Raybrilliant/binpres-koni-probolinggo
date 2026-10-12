@@ -165,6 +165,23 @@ if (typeof localStorage !== 'undefined') localStorage.removeItem('binpres-admin-
 
 export const ui = $state({ loaded: false, toast: '', refreshing: false });
 
+// Isi data awal dari hasil fetch SSR (index.astro) supaya HTML pertama sudah
+// berisi konten nyata (pengurus, statistik, cabor) — terbaca crawler/AI.
+// Dipanggil ulang saat hidrasi; refresh() berikutnya menimpa dengan data segar.
+export function seedFromServer(summary?: Record<string, any[]> | null, cabor?: string[] | null) {
+  if (Array.isArray(cabor) && cabor.length > 0) {
+    CABOR.length = 0;
+    CABOR.push(...cabor);
+  }
+  if (summary && typeof summary === 'object') {
+    db.sections.forEach((s) => {
+      const rows = summary[SHEET[s.id] ?? s.id];
+      if (Array.isArray(rows)) s.rows = rows;
+    });
+    ui.loaded = true;
+  }
+}
+
 // ==== daftar terpaginasi (server-side: page/q/periode dikirim ke backend) ====
 export const PER_PAGE = 10;
 export const list = $state({

@@ -5,8 +5,18 @@ import tailwindcss from '@tailwindcss/vite';
 
 import svelte from '@astrojs/svelte';
 
+import node from '@astrojs/node';
+
 // https://astro.build/config
 export default defineConfig({
+  // output "server" = SSR penuh di VPS (Node adapter, mode standalone).
+  // Domain produksi utk canonical/OG/sitemap diatur via PUBLIC_SITE_URL di .env
+  // dan dibaca src/lib/site.ts.
+  output: 'server',
+  adapter: node({
+    mode: 'standalone',
+  }),
+
   vite: {
     plugins: [tailwindcss()],
     server: {
@@ -18,5 +28,5 @@ export default defineConfig({
     },
   },
 
-  integrations: [svelte()]
+  integrations: [svelte()],
 });
